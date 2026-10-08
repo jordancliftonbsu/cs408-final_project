@@ -1,0 +1,20 @@
+[Unit]
+Description=FantasyLoL Web Service
+After=network.target
+
+[Service]
+Type=simple
+User=fantasylol
+Group=fantasylol
+WorkingDirectory=/opt/fantasylol
+EnvironmentFile=/opt/fantasylol/.env
+ExecStart=/opt/fantasylol/fantasylol
+Restart=always
+RestartSec=5
+
+# Security hardening
+ProtectSystem=full
+ReadWritePaths=/opt/fantasylol/data
+
+[Install]
+WantedBy=multi-user.target

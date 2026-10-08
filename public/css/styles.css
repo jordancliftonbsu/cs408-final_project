@@ -1,0 +1,124 @@
+/* Custom League-inspired Dark / Gold / Red Theme */
+
+:root {
+    /* Dark Gray Background Palette */
+    --bg-darkest: #0a0c10;
+    --bg-dark: #12161f;
+    --bg-card: #1a202c;
+    --border-color: #2d3748;
+
+    /* Primary Accent: Gold / Yellow */
+    --gold-primary: #f59e0b;
+    --gold-hover: #d97706;
+    --gold-glow: rgba(245, 158, 11, 0.25);
+
+    /* Rare Accent: Red */
+    --red-accent: #ef4444;
+    --red-hover: #dc2626;
+
+    /* Text Colors */
+    --text-primary: #f3f4f6;
+    --text-muted: #9ca3af;
+}
+
+body {
+    background-color: var(--bg-darkest);
+    color: var(--text-primary);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Navbar Customization */
+.navbar-custom {
+    background-color: var(--bg-dark);
+    border-bottom: 2px solid var(--border-color);
+}
+
+.brand-gold {
+    color: var(--gold-primary);
+    font-weight: 700;
+    font-size: 1.4rem;
+    letter-spacing: 0.5px;
+}
+
+.brand-gold:hover {
+    color: var(--gold-hover);
+}
+
+/* Gold Accent Buttons */
+.btn-gold {
+    background-color: var(--gold-primary);
+    color: #000;
+    font-weight: 600;
+    border: none;
+    transition: all 0.2s ease-in-out;
+}
+
+.btn-gold:hover {
+    background-color: var(--gold-hover);
+    color: #000;
+    box-shadow: 0 0 15px var(--gold-glow);
+}
+
+.btn-outline-gold {
+    border: 1px solid var(--gold-primary);
+    color: var(--gold-primary);
+    font-weight: 600;
+}
+
+.btn-outline-gold:hover {
+    background-color: var(--gold-primary);
+    color: #000;
+}
+
+/* Red Accent Button (Rare Use Cases: Alerts, Live Matches, Critical Actions) */
+.btn-red {
+    background-color: var(--red-accent);
+    color: #fff;
+    font-weight: 600;
+    border: none;
+    transition: all 0.2s ease-in-out;
+}
+
+.btn-red:hover {
+    background-color: var(--red-hover);
+    color: #fff;
+    box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
+}
+
+/* Card Styling */
+.card-dark {
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+}
+
+/* Red Live Indicator Badge */
+.badge-live {
+    background-color: var(--red-accent);
+    color: #fff;
+    font-size: 0.75rem;
+    padding: 0.35em 0.65em;
+    border-radius: 4px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+.badge-gold {
+    background-color: var(--gold-primary);
+    color: #000;
+    font-weight: 600;
+}
+
+.text-gold {
+    color: var(--gold-primary) !important;
+}
+
+.text-red {
+    color: var(--red-accent) !important;
+}
+
+/* Footer */
+footer {
+    background-color: var(--bg-dark);
+    border-top: 1px solid var(--border-color);
+}
