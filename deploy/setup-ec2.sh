@@ -11,7 +11,8 @@ set -euo pipefail
 APP_NAME="fantasylol"
 APP_DIR="/home/ubuntu/fantasylol"
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Resolve absolute path to script directory regardless of where script is invoked from
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEPLOY_USER="${SUDO_USER:-ubuntu}"
 
 say() {
@@ -62,13 +63,12 @@ say "Creating application directory structure at $APP_DIR"
 
 mkdir -p "$APP_DIR/public" "$APP_DIR/data"
 
-# Ownership & Permissions:
-# - Ensure ubuntu user and Nginx (www-data) can read app files and execute directory traversals.
-chown -R "$DEPLOY_USER:$DEPLOY_USER" "$APP_DIR"
+# Ensure directory traversal for NGINX and ownership for ubuntu user
 chmod 755 /home/ubuntu
 chmod 755 "$APP_DIR"
 chmod 755 "$APP_DIR/public"
 chmod 775 "$APP_DIR/data"
+chown -R "$DEPLOY_USER:$DEPLOY_USER" "$APP_DIR"
 
 # --- Environment File -------------------------------------------------------
 
@@ -79,16 +79,20 @@ if [ ! -f "$APP_DIR/.env" ]; then
 PORT=8080
 DB_PATH=/home/ubuntu/fantasylol/data/fantasylol.db
 EOF
-    chown "$DEPLOY_USER:$DEPLOY_USER" "$APP_DIR/.env"
-    chmod 640 "$APP_DIR/.env"
 fi
+
+# Always ensure correct user permissions on .env
+chown "$DEPLOY_USER:$DEPLOY_USER" "$APP_DIR/.env"
+chmod 640 "$APP_DIR/.env"
 
 # --- systemd Service --------------------------------------------------------
 
 say "Configuring systemd service"
 
 if [ -f "$SCRIPT_DIR/fantasylol.service" ]; then
-    install -m 644 "$SCRIPT_DIR/fantasylol.service" "/etc/systemd/system/${APP_NAME}.service"
+    # Overwrite target to ensure systemd picks up latest repository changes
+    cp "$SCRIPT_DIR/fantasylol.service" "/etc/systemd/system/${APP_NAME}.service"
+    chmod 644 "/etc/systemd/system/${APP_NAME}.service"
     systemctl daemon-reload
     systemctl enable "$APP_NAME"
 else
@@ -100,12 +104,13 @@ fi
 say "Configuring Nginx reverse proxy"
 
 if [ -f "$SCRIPT_DIR/nginx-fantasylol.conf" ]; then
-    install -m 644 "$SCRIPT_DIR/nginx-fantasylol.conf" "/etc/nginx/conf.d/${APP_NAME}.conf"
+    cp "$SCRIPT_DIR/nginx-fantasylol.conf" "/etc/nginx/conf.d/${APP_NAME}.conf"
+    chmod 644 "/etc/nginx/conf.d/${APP_NAME}.conf"
 else
     die "Nginx config file $SCRIPT_DIR/nginx-fantasylol.conf not found."
 fi
 
-# Remove Ubuntu default site if present to prevent default_server port 80 collisions
+# Remove Ubuntu default site to prevent port 80 collisions
 if [ -L /etc/nginx/sites-enabled/default ] || [ -f /etc/nginx/sites-enabled/default ]; then
     rm -f /etc/nginx/sites-enabled/default
 fi

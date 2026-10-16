@@ -44,15 +44,22 @@ mkdir -p "${PROJECT_ROOT}/bin"
 echo "==> 2. Ensuring remote directory structure exists on EC2..."
 ssh "${TARGET_HOST}" "mkdir -p ${APP_DIR}/public ${APP_DIR}/data"
 
-echo "==> 3. Uploading binary to EC2..."
-scp "${PROJECT_ROOT}/bin/fantasylol" "${TARGET_HOST}:${APP_DIR}/fantasylol"
+# Inside configure_app.sh:
+echo "==> 3. Stopping remote service before upload..."
+ssh "$EC2_HOST" "sudo systemctl stop fantasylol || true"
+
+echo "==> 4. Uploading binary to EC2..."
+scp bin/fantasylol "$EC2_HOST":/home/ubuntu/fantasylol/fantasylol
+
+echo "==> 5. Restarting remote service..."
+ssh "$EC2_HOST" "sudo systemctl restart fantasylol"
 
 if [ -d "${PROJECT_ROOT}/public" ]; then
-    echo "==> 4. Uploading static public assets to EC2..."
+    echo "==> 6. Uploading static public assets to EC2..."
     scp -r "${PROJECT_ROOT}/public/." "${TARGET_HOST}:${APP_DIR}/public/"
 fi
 
-echo "==> 5. Setting executable permissions and restarting service..."
+echo "==> 7. Setting executable permissions and restarting service..."
 ssh "${TARGET_HOST}" "chmod +x ${APP_DIR}/fantasylol && sudo systemctl restart fantasylol && sudo systemctl status fantasylol"
 
 echo "==> Deployment complete!"
