@@ -5,6 +5,10 @@
 
 set -euo pipefail
 
+# Always run relative to project root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
 # Configuration
 PORT="${PORT:-8080}"
 DB_DIR="./data"
@@ -31,12 +35,13 @@ fi
 say "Go compiler detected: $(go version)"
 
 # -----------------------------------------------------------------------------
-# Step 2: Install Dependencies
+# Step 2: Install & Sync Dependencies
 # -----------------------------------------------------------------------------
-say "Step 2: Installing project dependencies..."
+say "Step 2: Syncing project dependencies..."
 
 if [ -f "go.mod" ]; then
     go mod download
+    go mod tidy
 else
     die "go.mod file not found in current directory."
 fi
@@ -44,19 +49,14 @@ fi
 # -----------------------------------------------------------------------------
 # Step 3: Initialize Database & Data Directories
 # -----------------------------------------------------------------------------
-say "Step 3: Setting up database and directories..."
+say "Step 3: Setting up database directories..."
 
 mkdir -p "$DB_DIR"
 
-if [ ! -f "$DB_PATH" ]; then
-    say "Creating SQLite database at $DB_PATH..."
-    touch "$DB_PATH"
-    
-    # If you have a schema file (e.g., schema.sql), you can seed it here:
-    if [ -f "schema.sql" ] && command -v sqlite3 >/dev/null 2>&1; then
-        sqlite3 "$DB_PATH" < schema.sql
-        echo "Database schema initialized from schema.sql."
-    fi
+# Optional: Apply schema.sql if present and sqlite3 binary is installed
+if [ ! -f "$DB_PATH" ] && [ -f "schema.sql" ] && command -v sqlite3 >/dev/null 2>&1; then
+    say "Initializing database schema from schema.sql..."
+    sqlite3 "$DB_PATH" < schema.sql
 fi
 
 # -----------------------------------------------------------------------------

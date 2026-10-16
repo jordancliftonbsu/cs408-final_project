@@ -9,11 +9,10 @@
 set -euo pipefail
 
 APP_NAME="fantasylol"
-APP_DIR="/opt/fantasylol"
-APP_USER="fantasylol"
+APP_DIR="/home/ubuntu/fantasylol"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-DEPLOY_USER="${SUDO_USER:-root}"
+DEPLOY_USER="${SUDO_USER:-ubuntu}"
 
 say() {
     printf '\n==> %s\n' "$1"
@@ -57,25 +56,19 @@ else
     dnf -y install nginx sqlite rsync
 fi
 
-# --- Service Account & Directories -------------------------------------------
-
-say "Creating service account '$APP_USER'"
-
-if ! id "$APP_USER" >/dev/null 2>&1; then
-    useradd --system --no-create-home --shell /usr/sbin/nologin "$APP_USER"
-fi
+# --- Directories & Permissions -----------------------------------------------
 
 say "Creating application directory structure at $APP_DIR"
 
 mkdir -p "$APP_DIR/public" "$APP_DIR/data"
 
 # Ownership & Permissions:
-# - DEPLOY_USER owns $APP_DIR and $APP_DIR/public to deploy binary & static assets via rsync.
-# - APP_USER owns $APP_DIR/data so the Go backend can write to the SQLite database.
-chown -R "$DEPLOY_USER:$APP_USER" "$APP_DIR"
-chown -R "$APP_USER:$APP_USER" "$APP_DIR/data"
-chmod 750 "$APP_DIR"
-chmod 770 "$APP_DIR/data"
+# - Ensure ubuntu user and Nginx (www-data) can read app files and execute directory traversals.
+chown -R "$DEPLOY_USER:$DEPLOY_USER" "$APP_DIR"
+chmod 755 /home/ubuntu
+chmod 755 "$APP_DIR"
+chmod 755 "$APP_DIR/public"
+chmod 775 "$APP_DIR/data"
 
 # --- Environment File -------------------------------------------------------
 
@@ -84,9 +77,9 @@ say "Initializing .env configuration file"
 if [ ! -f "$APP_DIR/.env" ]; then
     cat <<'EOF' > "$APP_DIR/.env"
 PORT=8080
-DB_PATH=/opt/fantasylol/data/fantasylol.db
+DB_PATH=/home/ubuntu/fantasylol/data/fantasylol.db
 EOF
-    chown "$DEPLOY_USER:$APP_USER" "$APP_DIR/.env"
+    chown "$DEPLOY_USER:$DEPLOY_USER" "$APP_DIR/.env"
     chmod 640 "$APP_DIR/.env"
 fi
 
@@ -112,8 +105,8 @@ else
     die "Nginx config file $SCRIPT_DIR/nginx-fantasylol.conf not found."
 fi
 
-# Remove Ubuntu default site if present
-if [ -L /etc/nginx/sites-enabled/default ]; then
+# Remove Ubuntu default site if present to prevent default_server port 80 collisions
+if [ -L /etc/nginx/sites-enabled/default ] || [ -f /etc/nginx/sites-enabled/default ]; then
     rm -f /etc/nginx/sites-enabled/default
 fi
 
@@ -147,6 +140,6 @@ Installed files & structure:
   - Systemd config: /etc/systemd/system/${APP_NAME}.service
   - Nginx config:   /etc/nginx/conf.d/${APP_NAME}.conf
 
-Next step: Deploy your code using deploy/deploy.sh from your local machine.
+Next step: Deploy your code using deploy/configure_app.sh from your local machine.
 
 EOF
