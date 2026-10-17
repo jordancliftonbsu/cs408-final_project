@@ -63,6 +63,8 @@ func main() {
 		fmt.Fprintln(w, "Hello World from FantasyLoL Backend!")
 	})
 
+	http.HandleFunc("/admin/stats/simulate", SimulateStatsHandler)
+
 	// 3. Serve static files from the ./public directory
 	fs := http.FileServer(http.Dir("./public"))
 	http.Handle("/", fs)
