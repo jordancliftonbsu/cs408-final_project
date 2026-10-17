@@ -8,7 +8,6 @@ EC2_HOST="${1:-}"
 TARGET_HOST="$EC2_HOST"
 APP_DIR="/home/ubuntu/fantasylol"
 
-# Script and Project Root relative paths
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
@@ -24,42 +23,68 @@ fi
 echo "==> Pre-flight check: Verifying SSH connection to $EC2_HOST..."
 
 if ! ssh -q -o BatchMode=yes -o ConnectTimeout=5 "$EC2_HOST" exit; then
-    echo ""
     echo "ERROR: Unable to connect to $EC2_HOST."
-    echo "---------------------------------------------------------------------"
-    echo "Tip: Ensure your AWS .pem key is placed in your local ~/.ssh/ directory:"
-    echo "  1. Move key:     mv ~/Downloads/your-key.pem ~/.ssh/"
-    echo "  2. Fix permissions: chmod 400 ~/.ssh/your-key.pem"
-    echo "---------------------------------------------------------------------"
     exit 1
 fi
 
 # -----------------------------------------------------------------------------
-# Step 1: Compiling Go binary for Linux
+# Step 1: Run Local Tests
 # -----------------------------------------------------------------------------
-echo "==> 1. Compiling Go binary for Linux (amd64)..."
-mkdir -p "${PROJECT_ROOT}/bin"
-(cd "${PROJECT_ROOT}" && GOOS=linux GOARCH=amd64 go build -o bin/fantasylol .)
+echo "==> 1. Running test suite prior to deployment..."
+(cd "${PROJECT_ROOT}" && CGO_ENABLED=0 go test -v -vet=off ./...)
 
-echo "==> 2. Ensuring remote directory structure exists on EC2..."
+# -----------------------------------------------------------------------------
+# Step 2: Compiling Go binary for Linux
+# -----------------------------------------------------------------------------
+echo "==> 2. Compiling Go binary for Linux (amd64)..."
+mkdir -p "${PROJECT_ROOT}/bin"
+(cd "${PROJECT_ROOT}" && GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o bin/fantasylol .)
+
+# -----------------------------------------------------------------------------
+# Step 3: Remote Directory Setup & Binary Upload
+# -----------------------------------------------------------------------------
+echo "==> 3. Ensuring remote directory structure exists on EC2..."
 ssh "${TARGET_HOST}" "mkdir -p ${APP_DIR}/public ${APP_DIR}/data"
 
-# Inside configure_app.sh:
-echo "==> 3. Stopping remote service before upload..."
+echo "==> 4. Stopping remote service..."
 ssh "$EC2_HOST" "sudo systemctl stop fantasylol || true"
 
-echo "==> 4. Uploading binary to EC2..."
+echo "==> 5. Uploading compiled binary and source files to EC2..."
 scp bin/fantasylol "$EC2_HOST":/home/ubuntu/fantasylol/fantasylol
 
-echo "==> 5. Restarting remote service..."
-ssh "$EC2_HOST" "sudo systemctl restart fantasylol"
+if [ -f "${PROJECT_ROOT}/go.mod" ]; then
+    scp "${PROJECT_ROOT}/go.mod" "$EC2_HOST":/home/ubuntu/fantasylol/
+fi
+if [ -f "${PROJECT_ROOT}/go.sum" ]; then
+    scp "${PROJECT_ROOT}/go.sum" "$EC2_HOST":/home/ubuntu/fantasylol/
+fi
+scp "${PROJECT_ROOT}"/*.go "$EC2_HOST":/home/ubuntu/fantasylol/ 2>/dev/null || true
 
+if [ -d "${PROJECT_ROOT}/scoring" ]; then
+    scp -r "${PROJECT_ROOT}/scoring" "$EC2_HOST":/home/ubuntu/fantasylol/
+fi
+
+# -----------------------------------------------------------------------------
+# Step 4: Resolve Remote Dependencies
+# -----------------------------------------------------------------------------
+echo "==> 6. Synchronizing Go modules on EC2..."
+ssh "${TARGET_HOST}" "
+    cd ${APP_DIR}
+    if [ ! -f 'go.mod' ]; then
+        go mod init fantasylol
+    fi
+    go mod tidy
+"
+
+# -----------------------------------------------------------------------------
+# Step 5: Public Assets & Service Restart
+# -----------------------------------------------------------------------------
 if [ -d "${PROJECT_ROOT}/public" ]; then
-    echo "==> 6. Uploading static public assets to EC2..."
+    echo "==> 7. Uploading static public assets to EC2..."
     scp -r "${PROJECT_ROOT}/public/." "${TARGET_HOST}:${APP_DIR}/public/"
 fi
 
-echo "==> 7. Setting executable permissions and restarting service..."
+echo "==> 8. Setting executable permissions and restarting service..."
 ssh "${TARGET_HOST}" "chmod +x ${APP_DIR}/fantasylol && sudo systemctl restart fantasylol && sudo systemctl status fantasylol"
 
 echo "==> Deployment complete!"

@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	_ "modernc.org/sqlite" // <--- Blank import registers the "sqlite" driver
+	_ "modernc.org/sqlite"
 )
 
 // initDB handles the SQLite connection and schema setup
