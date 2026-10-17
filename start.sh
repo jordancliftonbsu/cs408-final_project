@@ -75,4 +75,4 @@ echo ""
 export PORT="$PORT"
 export DB_PATH="$DB_PATH"
 
-go run main.go
+go run .
