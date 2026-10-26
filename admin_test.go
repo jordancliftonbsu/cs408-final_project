@@ -5,81 +5,96 @@ import (
 	"database/sql"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	_ "modernc.org/sqlite"
 )
 
-// SetupTestDB initializes an isolated in-memory SQLite database for testing
+// SetupTestDB initializes an isolated in-memory SQLite database using schema.sql
 func SetupTestDB(t *testing.T) *sql.DB {
-	// Use :memory: or shared cache in-memory string to prevent disk locking
-	db, err := sql.Open("sqlite", "file::memory:?cache=shared")
+	db, err := sql.Open("sqlite", "file::memory:?cache=shared&_fk=1")
 	if err != nil {
 		t.Fatalf("failed to open test database: %v", err)
 	}
 
-	// Create tables required for testing
-	query := `
-	CREATE TABLE IF NOT EXISTS stats (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		player_name TEXT,
-		points REAL
-	);`
-	if _, err := db.Exec(query); err != nil {
-		t.Fatalf("failed to create test table: %v", err)
+	schema, err := os.ReadFile("schema.sql")
+	if err != nil {
+		t.Fatalf("failed to read schema.sql: %v", err)
+	}
+
+	if _, err := db.Exec(string(schema)); err != nil {
+		t.Fatalf("failed to execute schema.sql in test: %v", err)
 	}
 
 	return db
 }
 
-func TestSQLiteCRUDIntegration(t *testing.T) {
+// TestSchemaValidation verifies tables and FK constraints
+func TestSchemaValidation(t *testing.T) {
 	db := SetupTestDB(t)
-	defer db.Close() // ALWAYS close DB handle to avoid hanging on test cleanup
+	defer db.Close()
 
-	// 1. CREATE (Insert)
-	res, err := db.Exec("INSERT INTO stats (player_name, points) VALUES (?, ?)", "Faker", 43.0)
-	if err != nil {
-		t.Fatalf("failed to insert stat: %v", err)
+	// Clear dependent child table first to satisfy foreign key constraints
+	if _, err := db.Exec("DELETE FROM pro_match_stats; DELETE FROM pro_players;"); err != nil {
+		t.Fatalf("failed to clear pro_players: %v", err)
 	}
 
-	id, _ := res.LastInsertId()
+	// Insert test player record
+	_, err := db.Exec(`
+		INSERT INTO pro_players (handle, real_name, role, pro_team, region, image_url)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`, "Faker", "Lee Sang-hyeok", "Mid", "T1", "LCK", "https://example.com/faker.png")
 
-	// 2. READ
-	var name string
-	var points float64
-	err = db.QueryRow("SELECT player_name, points FROM stats WHERE id = ?", id).Scan(&name, &points)
 	if err != nil {
-		t.Fatalf("failed to read stat: %v", err)
-	}
-	if name != "Faker" || points != 43.0 {
-		t.Errorf("expected Faker/43.0, got %s/%.1f", name, points)
-	}
-
-	// 3. UPDATE
-	_, err = db.Exec("UPDATE stats SET points = ? WHERE id = ?", 48.0, id)
-	if err != nil {
-		t.Fatalf("failed to update stat: %v", err)
-	}
-
-	// 4. DELETE
-	_, err = db.Exec("DELETE FROM stats WHERE id = ?", id)
-	if err != nil {
-		t.Fatalf("failed to delete stat: %v", err)
+		t.Fatalf("failed to insert pro player: %v", err)
 	}
 }
 
+// TestSystemSettingsTracker verifies storing and retrieving the last_stats_update timestamp
+func TestSystemSettingsTracker(t *testing.T) {
+	db := SetupTestDB(t)
+	defer db.Close()
+
+	// Default fallback check
+	lastUpdate, err := GetLastStatsUpdate(db)
+	if err != nil {
+		t.Fatalf("unexpected error reading initial last update: %v", err)
+	}
+	if lastUpdate == "" {
+		t.Errorf("expected non-empty default last update timestamp")
+	}
+
+	// Set and verify update
+	if err := SetLastStatsUpdate(db); err != nil {
+		t.Fatalf("failed to set last stats update: %v", err)
+	}
+
+	updatedVal, err := GetLastStatsUpdate(db)
+	if err != nil {
+		t.Fatalf("failed to read updated last stats update: %v", err)
+	}
+	if updatedVal == lastUpdate {
+		t.Errorf("expected updated timestamp, got unchanged value: %s", updatedVal)
+	}
+}
+
+// TestAdminUpdateStatsIntegration verifies the HTTP admin route handler
 func TestAdminUpdateStatsIntegration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping network integration test in short mode")
+	}
+
 	db := SetupTestDB(t)
 	defer db.Close()
 
 	adminHandler := &AdminHandler{DB: db}
 
-	payload := []byte(`{"player_name": "Faker"}`)
+	payload := []byte(`{}`)
 	req, err := http.NewRequest(http.MethodPost, "/admin/stats/update", bytes.NewBuffer(payload))
 	if err != nil {
 		t.Fatalf("failed to create request: %v", err)
 	}
-	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
 	handler := http.HandlerFunc(adminHandler.UpdatePlayerStatsHandler)

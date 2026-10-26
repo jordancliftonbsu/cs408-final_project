@@ -1,0 +1,159 @@
+// package main
+
+// import (
+// 	"encoding/json"
+// 	"fmt"
+// 	"io"
+// 	"log"
+// 	"net/http"
+// 	"net/http/cookiejar"
+// 	"net/url"
+// 	"os"
+// 	"strings"
+
+// 	"github.com/joho/godotenv"
+// )
+
+// const leaguepediaAPI = "https://lol.fandom.com/api.php"
+// const userAgentHeader = "FantasyLoLBot/1.0 (+https://fantasylol.com; admin@fantasylol.com) Go-HTTP-Client/1.1"
+
+// type CargoResponse struct {
+// 	CargoQuery []map[string]map[string]string `json:"cargoquery"`
+// 	Error      *struct {
+// 		Code string `json:"code"`
+// 		Info string `json:"info"`
+// 	} `json:"error,omitempty"`
+// }
+
+// type BotClient struct {
+// 	HTTPClient *http.Client
+// 	BaseURL    string
+// }
+
+// func NewBotClient(baseURL string) (*BotClient, error) {
+// 	jar, err := cookiejar.New(nil)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	client := &http.Client{
+// 		Jar: jar,
+// 	}
+
+// 	return &BotClient{
+// 		HTTPClient: client,
+// 		BaseURL:    baseURL,
+// 	}, nil
+// }
+
+// func (c *BotClient) Login(username, botPassword string) error {
+// 	tokenURL := fmt.Sprintf("%s?action=query&meta=tokens&type=login&format=json", c.BaseURL)
+// 	req, err := http.NewRequest("GET", tokenURL, nil)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	req.Header.Set("User-Agent", userAgentHeader)
+
+// 	resp, err := c.HTTPClient.Do(req)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	defer resp.Body.Close()
+
+// 	body, _ := io.ReadAll(resp.Body)
+// 	var tokenResp struct {
+// 		Query struct {
+// 			Tokens struct {
+// 				LoginToken string `json:"logintoken"`
+// 			} `json:"tokens"`
+// 		} `json:"query"`
+// 	}
+
+// 	if err := json.Unmarshal(body, &tokenResp); err != nil {
+// 		return fmt.Errorf("failed to parse login token: %w", err)
+// 	}
+
+// 	form := url.Values{}
+// 	form.Set("action", "login")
+// 	form.Set("lgname", username)
+// 	form.Set("lgpassword", botPassword)
+// 	form.Set("lgtoken", tokenResp.Query.Tokens.LoginToken)
+// 	form.Set("format", "json")
+
+// 	postReq, err := http.NewRequest("POST", c.BaseURL, strings.NewReader(form.Encode()))
+// 	if err != nil {
+// 		return err
+// 	}
+// 	postReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+// 	postReq.Header.Set("User-Agent", userAgentHeader)
+
+// 	postResp, err := c.HTTPClient.Do(postReq)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	defer postResp.Body.Close()
+
+// 	postBody, _ := io.ReadAll(postResp.Body)
+// 	var loginResult struct {
+// 		Login struct {
+// 			Result string `json:"result"`
+// 			Reason string `json:"reason,omitempty"`
+// 		} `json:"login"`
+// 	}
+
+// 	if err := json.Unmarshal(postBody, &loginResult); err != nil {
+// 		return fmt.Errorf("failed to parse login response: %w", err)
+// 	}
+
+// 	if loginResult.Login.Result != "Success" {
+// 		return fmt.Errorf("bot login failed: %s %s", loginResult.Login.Result, loginResult.Login.Reason)
+// 	}
+
+// 	log.Printf("[BOT AUTH] Logged in successfully as: %s", username)
+// 	return nil
+// }
+
+// func main() {
+// 	_ = godotenv.Load()
+
+// 	username := os.Getenv("FANDOM_USERNAME")
+// 	botPass := os.Getenv("FANDOM_BOT_PASS")
+
+// 	if username == "" || botPass == "" {
+// 		log.Fatal("FANDOM_USERNAME or FANDOM_BOT_PASS environment variable is missing")
+// 	}
+
+// 	bot, err := NewBotClient(leaguepediaAPI)
+// 	if err != nil {
+// 		log.Fatalf("Failed to create client: %v", err)
+// 	}
+
+// 	if err := bot.Login(username, botPass); err != nil {
+// 		log.Fatalf("Login failed: %v", err)
+// 	}
+
+// 	// Exact target route query parameters
+// 	params := url.Values{}
+// 	params.Set("action", "cargoquery")
+// 	params.Set("tables", "ScoreboardGames")
+// 	params.Set("fields", "OverviewPage,GameId,DateTime_UTC,Team1,Team2,WinTeam,Team1Players,Team2Players")
+// 	params.Set("where", "Team1Players HOLDS '1xn' OR Team2Players HOLDS '1xn'")
+// 	params.Set("order_by", "DateTime_UTC DESC")
+// 	params.Set("limit", "10")
+// 	params.Set("format", "json")
+
+// 	fullURL := fmt.Sprintf("%s?%s", leaguepediaAPI, params.Encode())
+// 	log.Printf("[TESTING URL]: %s\n", fullURL)
+
+// 	req, _ := http.NewRequest("GET", fullURL, nil)
+// 	req.Header.Set("User-Agent", userAgentHeader)
+
+// 	resp, err := bot.HTTPClient.Do(req)
+// 	if err != nil {
+// 		log.Fatalf("HTTP Request failed: %v", err)
+// 	}
+// 	defer resp.Body.Close()
+
+// 	body, _ := io.ReadAll(resp.Body)
+// 	log.Printf("[RAW RESPONSE BODY]:\n%s\n", string(body))
+// }

@@ -8,6 +8,8 @@ User=ubuntu
 Group=ubuntu
 WorkingDirectory=/home/ubuntu/fantasylol
 EnvironmentFile=/home/ubuntu/fantasylol/.env
+Environment=PORT=8080
+Environment=DB_PATH=/home/ubuntu/fantasylol/data/fantasylol.db
 ExecStart=/home/ubuntu/fantasylol/fantasylol
 Restart=always
 RestartSec=5

@@ -47,22 +47,28 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-# Step 3: Initialize Database & Data Directories
+# Step 3: Run Verification Suite
 # -----------------------------------------------------------------------------
-say "Step 3: Setting up database directories..."
+say "Step 3: Running test suite & build check..."
 
-mkdir -p "$DB_DIR"
-
-# Optional: Apply schema.sql if present and sqlite3 binary is installed
-if [ ! -f "$DB_PATH" ] && [ -f "schema.sql" ] && command -v sqlite3 >/dev/null 2>&1; then
-    say "Initializing database schema from schema.sql..."
-    sqlite3 "$DB_PATH" < schema.sql
+if [ -f "test.sh" ]; then
+    chmod +x test.sh
+    ./test.sh
+else
+    say "Warning: test.sh not found, skipping automated tests."
 fi
 
 # -----------------------------------------------------------------------------
-# Step 4: Start App
+# Step 4: Setup Database Directory
 # -----------------------------------------------------------------------------
-say "Step 4: Starting FantasyLoL..."
+say "Step 4: Preparing database directory..."
+
+mkdir -p "$DB_DIR"
+
+# -----------------------------------------------------------------------------
+# Step 5: Start App
+# -----------------------------------------------------------------------------
+say "Step 5: Starting FantasyLoL..."
 
 echo ""
 echo "=================================================="
@@ -71,7 +77,7 @@ echo " Press Ctrl+C to stop the server."
 echo "=================================================="
 echo ""
 
-# Run the Go server
+# Export environment variables & launch Go app
 export PORT="$PORT"
 export DB_PATH="$DB_PATH"
 
