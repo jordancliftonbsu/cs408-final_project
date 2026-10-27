@@ -42,8 +42,8 @@ func TestSchemaValidation(t *testing.T) {
 
 	// Insert test player record
 	_, err := db.Exec(`
-		INSERT INTO pro_players (handle, real_name, role, pro_team, region, image_url)
-		VALUES (?, ?, ?, ?, ?, ?)
+		INSERT INTO pro_players (handle, role, pro_team, region, image_url)
+		VALUES (?, ?, ?, ?, ?)
 	`, "Faker", "Lee Sang-hyeok", "Mid", "T1", "LCK", "https://example.com/faker.png")
 
 	if err != nil {

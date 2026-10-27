@@ -48,45 +48,40 @@ func TriggerLiveIngestion(db *sql.DB) error {
 		return fmt.Errorf("fandom authentication failed: %w", err)
 	}
 
-	log.Println("[INGEST] Authenticated successfully. Clearing previous records before fresh live sync...")
+	log.Println("[INGEST] Authenticated successfully.")
 
-	// Clear existing local players and stats to avoid stale/mock entries
-	_, _ = db.Exec("DELETE FROM pro_match_stats;")
-	_, _ = db.Exec("DELETE FROM pro_players;")
+	// Read the last successful ingestion timestamp. All queries will be
+	// filtered to only fetch games that occurred after this point.
+	sinceDate, err := GetLastStatsUpdate(db)
+	if err != nil {
+		return fmt.Errorf("could not read last_stats_update: %w", err)
+	}
+	log.Printf("[INGEST] Incremental sync — fetching games after: %s", sinceDate)
 
-	// Sync premier Tier-1 leagues
-	regions := []string{"LCK", "LCS", "LEC", "LPL"}
+	// Load game_ids already fully imported so we can skip them without
+	// re-querying the API even within the current date window.
+	knownGameIDs, err := loadKnownGameIDs(db)
+	if err != nil {
+		log.Printf("[INGEST WARNING] Could not load known game IDs: %v — proceeding without skip cache", err)
+		knownGameIDs = make(map[string]struct{})
+	}
+	log.Printf("[INGEST] %d game_ids already fully imported", len(knownGameIDs))
+
+	var regions = [...]string{"International", "North America", "Korea", "China", "EMEA"}
+	allSucceeded := true
+
 	for _, region := range regions {
-		if err := FetchProPlayers(db, bot, region); err != nil {
-			log.Printf("[INGEST WARNING] Failed fetching region %s: %v", region, err)
+		if err := IngestRecentLeagueStats(db, bot, region, sinceDate, knownGameIDs); err != nil {
+			log.Printf("[INGEST WARNING] Region %s failed: %v", region, err)
+			allSucceeded = false
 		}
 	}
 
-	// Fetch handles to query match stats in batches to protect against rate limits
-	rows, err := db.Query("SELECT handle FROM pro_players LIMIT 100")
-	var handles []string
-	if err == nil {
-		for rows.Next() {
-			var handle string
-			if err := rows.Scan(&handle); err == nil {
-				handles = append(handles, handle)
-			}
-		}
-		rows.Close()
-	}
-
-	// Process handles in chunks of 20 to reduce total HTTP requests while staying within URL length limits
-	batchSize := 20
-	for i := 0; i < len(handles); i += batchSize {
-		end := i + batchSize
-		if end > len(handles) {
-			end = len(handles)
-		}
-
-		batch := handles[i:end]
-		if err := FetchMatchStatsForPlayers(db, bot, batch); err != nil {
-			log.Printf("[INGEST WARNING] Failed batch match stats fetch for handles %v: %v", batch, err)
-		}
+	// Only advance the timestamp when every region completed without error.
+	// A partial failure leaves last_stats_update unchanged so the next run
+	// retries from the same point and nothing is silently skipped.
+	if !allSucceeded {
+		return fmt.Errorf("one or more regions failed; last_stats_update not advanced")
 	}
 
 	return SetLastStatsUpdate(db)
@@ -98,16 +93,15 @@ func StatsAPIHandler(db *sql.DB) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 
 		query := `
-			SELECT 
+			SELECT DISTINCT
 				p.player_id,
 				p.handle,
-				p.real_name,
 				p.role,
 				p.pro_team,
 				p.region,
-				p.image_url,
+				COALESCE(p.image_url, '') AS image_url,
 				COALESCE(s.match_date, '') AS match_date,
-				COALESCE(s.week_number, 1) AS week_number,
+				COALESCE(s.win, 0) AS win,
 				COALESCE(s.kills, 0) AS kills,
 				COALESCE(s.deaths, 0) AS deaths,
 				COALESCE(s.assists, 0) AS assists,
@@ -115,7 +109,7 @@ func StatsAPIHandler(db *sql.DB) http.HandlerFunc {
 				COALESCE(s.fantasy_points, 0.0) AS fantasy_points
 			FROM pro_players p
 			LEFT JOIN pro_match_stats s ON p.player_id = s.player_id
-			ORDER BY s.fantasy_points DESC, p.handle ASC;
+			ORDER BY s.match_date DESC, s.fantasy_points DESC;
 		`
 
 		rows, err := db.Query(query)
@@ -128,13 +122,12 @@ func StatsAPIHandler(db *sql.DB) http.HandlerFunc {
 		type PlayerStatDTO struct {
 			PlayerID      int     `json:"player_id"`
 			Handle        string  `json:"handle"`
-			RealName      string  `json:"real_name"`
 			Role          string  `json:"role"`
 			ProTeam       string  `json:"pro_team"`
 			Region        string  `json:"region"`
 			ImageURL      string  `json:"image_url"`
 			MatchDate     string  `json:"match_date"`
-			WeekNumber    int     `json:"week_number"`
+			Win           int     `json:"win"`
 			Kills         int     `json:"kills"`
 			Deaths        int     `json:"deaths"`
 			Assists       int     `json:"assists"`
@@ -142,22 +135,19 @@ func StatsAPIHandler(db *sql.DB) http.HandlerFunc {
 			FantasyPoints float64 `json:"fantasy_points"`
 		}
 
-		var stats []PlayerStatDTO
+		stats := make([]PlayerStatDTO, 0)
 		for rows.Next() {
 			var ps PlayerStatDTO
-			var realName sql.NullString
-			var imageURL sql.NullString
 
 			err := rows.Scan(
 				&ps.PlayerID,
 				&ps.Handle,
-				&realName,
 				&ps.Role,
 				&ps.ProTeam,
 				&ps.Region,
-				&imageURL,
+				&ps.ImageURL,
 				&ps.MatchDate,
-				&ps.WeekNumber,
+				&ps.Win,
 				&ps.Kills,
 				&ps.Deaths,
 				&ps.Assists,
@@ -169,14 +159,12 @@ func StatsAPIHandler(db *sql.DB) http.HandlerFunc {
 				return
 			}
 
-			if realName.Valid {
-				ps.RealName = realName.String
-			}
-			if imageURL.Valid {
-				ps.ImageURL = imageURL.String
-			}
-
 			stats = append(stats, ps)
+		}
+
+		if err := rows.Err(); err != nil {
+			http.Error(w, fmt.Sprintf("Error iterating rows: %v", err), http.StatusInternalServerError)
+			return
 		}
 
 		json.NewEncoder(w).Encode(stats)

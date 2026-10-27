@@ -39,11 +39,11 @@ CREATE TABLE IF NOT EXISTS fantasy_teams (
 -- 4. Pro Players Table
 CREATE TABLE IF NOT EXISTS pro_players (
     player_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    leaguepedia_id TEXT UNIQUE,            -- Leaguepedia Players.OverviewPage (canonical cross-table key)
     handle VARCHAR(255) UNIQUE NOT NULL,
-    real_name VARCHAR(255),
     role VARCHAR(50) NOT NULL,
     pro_team VARCHAR(255) NOT NULL,
-    region VARCHAR(4) NOT NULL,
+    region VARCHAR(8) NOT NULL,            -- home region code: LCK, LPL, LEC, LCS, LCS.A, PCS, …
     image_url TEXT
 );
 
@@ -61,15 +61,16 @@ CREATE TABLE IF NOT EXISTS roster_slots (
 CREATE TABLE IF NOT EXISTS pro_match_stats (
     stat_id INTEGER PRIMARY KEY AUTOINCREMENT,
     player_id INTEGER NOT NULL,
+    game_id TEXT,                          -- Leaguepedia GameId for deduplication
     match_date DATE NOT NULL,
-    week_number INTEGER DEFAULT 1,
-    win INTEGER DEFAULT 0, -- 1 for Win, 0 for Loss
+    win INTEGER DEFAULT 0,                 -- 1 for Win, 0 for Loss
     kills INTEGER DEFAULT 0,
     deaths INTEGER DEFAULT 0,
     assists INTEGER DEFAULT 0,
     creep_score INTEGER DEFAULT 0,
     fantasy_points REAL DEFAULT 0.0,
-    FOREIGN KEY (player_id) REFERENCES pro_players(player_id)
+    FOREIGN KEY (player_id) REFERENCES pro_players(player_id),
+    UNIQUE (player_id, game_id)            -- prevent duplicate rows on re-ingestion
 );
 
 -- 7. System Settings Tracker Table
@@ -79,21 +80,41 @@ CREATE TABLE IF NOT EXISTS system_settings (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 8. Leaguepedia Tournaments Table
+--    One row per tournament we have ever ingested from.
+--    overview_page is the canonical Leaguepedia wiki-path key (e.g.
+--    "LEC/2026 Season/Spring Season") and is used as the join key
+--    everywhere on the wiki.  It is also the value stored in
+--    ScoreboardPlayers.OverviewPage, ScoreboardGames.OverviewPage, etc.
+CREATE TABLE IF NOT EXISTS lp_tournaments (
+    lp_tournament_id  INTEGER PRIMARY KEY AUTOINCREMENT,
+    overview_page     TEXT UNIQUE NOT NULL,     -- Leaguepedia OverviewPage (stable key)
+    name              TEXT NOT NULL,            -- display name, e.g. "LEC 2026 Spring"
+    region            VARCHAR(8) NOT NULL,      -- mapped code: LCK, LPL, LEC, LCS, INT, …
+    date_start        DATE,                     -- tournament start date from Leaguepedia
+    date_end          DATE,                     -- tournament end date from Leaguepedia
+    first_ingested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_synced_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 9. Leaguepedia Games Table
+--    One row per individual game (not series/match) that belongs to a
+--    tracked tournament.  stats_complete is set to 1 once all 10 player
+--    rows for this game_id have been written to pro_match_stats, so
+--    subsequent ingestion runs can skip it without re-querying the API.
+CREATE TABLE IF NOT EXISTS lp_games (
+    lp_game_id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    lp_tournament_id INTEGER NOT NULL,
+    game_id          TEXT UNIQUE NOT NULL,      -- Leaguepedia GameId
+    match_id         TEXT,                      -- Leaguepedia MatchId (series identifier)
+    game_date        DATETIME,                  -- UTC datetime of the game
+    team_blue        TEXT,                      -- blue-side team name
+    team_red         TEXT,                      -- red-side team name
+    winner           TEXT,                      -- winning team name
+    stats_complete   INTEGER DEFAULT 0,         -- 1 = all 10 player rows imported
+    imported_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (lp_tournament_id) REFERENCES lp_tournaments(lp_tournament_id)
+);
+
 -- Re-enable foreign key constraints
 PRAGMA foreign_keys = ON;
-
--- Seed Data for Pro Players
-INSERT OR IGNORE INTO pro_players (handle, real_name, role, pro_team, region, image_url) VALUES
-('Faker', 'Lee Sang-hyeok', 'Mid', 'T1', 'LCK', ''),
-('Chovy', 'Jeong Ji-hoon', 'Mid', 'Gen.G', 'LCK', ''),
-('Caps', 'Rasmus Winther', 'Mid', 'G2 Esports', 'LEC', ''),
-('Blaber', 'Robert Huang', 'Jng', 'Cloud9', 'LCS', ''),
-('Knight', 'Zhuo Ding', 'Mid', 'BLG', 'LPL', '');
-
--- -- Seed Data for Pro Match Stats
--- INSERT OR IGNORE INTO pro_match_stats (stat_id, player_id, match_date, week_number, kills, deaths, assists, creep_score, fantasy_points) VALUES
--- (1, (SELECT player_id FROM pro_players WHERE handle='Faker'), '2026-03-01', 1, 6, 1, 8, 280, 24.50),
--- (2, (SELECT player_id FROM pro_players WHERE handle='Chovy'), '2026-03-01', 1, 8, 0, 5, 310, 28.20),
--- (3, (SELECT player_id FROM pro_players WHERE handle='Caps'), '2026-03-01', 1, 5, 3, 9, 250, 21.00),
--- (4, (SELECT player_id FROM pro_players WHERE handle='Blaber'), '2026-03-01', 1, 4, 2, 11, 190, 22.80),
--- (5, (SELECT player_id FROM pro_players WHERE handle='Knight'), '2026-03-01', 1, 9, 1, 4, 295, 29.10);

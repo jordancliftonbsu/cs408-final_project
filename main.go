@@ -14,7 +14,10 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// InitDB handles the SQLite connection and schema setup
+// InitDB handles the SQLite connection and schema setup, then automatically
+// seeds the database from seed.sql on every startup. Because all seed
+// statements use INSERT OR IGNORE, running against an already-populated
+// database is safe — existing rows are never overwritten.
 func InitDB() (*sql.DB, error) {
 	dbPath := os.Getenv("DB_PATH")
 	if dbPath == "" {
@@ -34,85 +37,41 @@ func InitDB() (*sql.DB, error) {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	// Read and execute schema.sql
+	// Apply schema (all CREATE TABLE IF NOT EXISTS — safe to re-run)
 	schema, err := os.ReadFile("schema.sql")
 	if err != nil {
 		return nil, fmt.Errorf("failed to read schema.sql: %w", err)
 	}
-
 	if _, err := db.Exec(string(schema)); err != nil {
 		return nil, fmt.Errorf("failed to execute schema.sql: %w", err)
 	}
 
+	// Seed demo data (INSERT OR IGNORE — safe to re-run, never overwrites)
+	SeedData(db)
+
 	return db, nil
 }
 
-// SeedDummyData populates local DB with sample players and stats if live import is skipped
-func SeedDummyData(db *sql.DB) {
-	log.Println("[DUMMY DATA] Seeding local database with mock players and match stats...")
+// SeedData reads seed.sql and executes its contents against the database.
+// Existing records (matching handles) are skipped automatically via INSERT OR IGNORE.
+func SeedData(db *sql.DB) {
+	log.Println("[SEED DATA] Reading seed.sql file...")
 
-	type MockPlayer struct {
-		Handle  string
-		Team    string
-		Role    string
-		Region  string
-		Image   string
-		Kills   int
-		Deaths  int
-		Assists int
-		CS      int
-		Points  float64
-	}
-
-	players := []MockPlayer{
-		{"Faker", "T1", "Mid", "LCK", "https://lol.fandom.com/wiki/Special:FilePath/Faker_2024_Split_1.png", 6, 1, 8, 280, 24.5},
-		{"Chovy", "Gen.G", "Mid", "LCK", "https://lol.fandom.com/wiki/Special:FilePath/Chovy_2024_Split_1.png", 8, 0, 5, 340, 28.2},
-		{"Caps", "G2 Esports", "Mid", "LEC", "https://lol.fandom.com/wiki/Special:FilePath/Caps_2024_Split_1.png", 7, 3, 9, 290, 23.8},
-		{"Blaber", "Cloud9", "Jungle", "LCS", "https://lol.fandom.com/wiki/Special:FilePath/Blaber_2024_Split_1.png", 4, 2, 11, 195, 19.4},
-		{"JackeyLove", "Top Esports", "Bot", "LPL", "https://lol.fandom.com/wiki/Special:FilePath/JackeyLove_2024_Split_1.png", 10, 2, 4, 310, 31.0},
-		{"Keria", "T1", "Support", "LCK", "https://lol.fandom.com/wiki/Special:FilePath/Keria_2024_Split_1.png", 1, 2, 16, 45, 18.5},
-	}
-
-	playerStmt, err := db.Prepare(`
-		INSERT INTO pro_players (handle, pro_team, role, region, image_url)
-		VALUES (?, ?, ?, ?, ?)
-		ON CONFLICT(handle) DO UPDATE SET
-			pro_team = excluded.pro_team,
-			role = excluded.role,
-			region = excluded.region,
-			image_url = excluded.image_url;
-	`)
+	sqlContent, err := os.ReadFile("seed.sql")
 	if err != nil {
-		log.Printf("[DUMMY DATA ERROR] Failed to prepare player statement: %v", err)
+		log.Printf("[SEED DATA ERROR] Failed to read seed.sql file: %v", err)
 		return
 	}
-	defer playerStmt.Close()
 
-	statStmt, err := db.Prepare(`
-		INSERT INTO pro_match_stats (
-			player_id, match_date, week_number, win, kills, deaths, assists, creep_score, fantasy_points
-		) VALUES (?, '2026-01-15', 1, 1, ?, ?, ?, ?, ?);
-	`)
+	log.Println("[SEED DATA] Seeding database with SQL statements...")
+
+	_, err = db.Exec(string(sqlContent))
 	if err != nil {
-		log.Printf("[DUMMY DATA ERROR] Failed to prepare stats statement: %v", err)
+		log.Printf("[SEED DATA ERROR] Failed to execute seed SQL statements: %v", err)
 		return
 	}
-	defer statStmt.Close()
 
-	for _, p := range players {
-		_, err := playerStmt.Exec(p.Handle, p.Team, p.Role, p.Region, p.Image)
-		if err != nil {
-			continue
-		}
-
-		var playerID int
-		if err := db.QueryRow("SELECT player_id FROM pro_players WHERE handle = ?", p.Handle).Scan(&playerID); err == nil {
-			_, _ = db.Exec("DELETE FROM pro_match_stats WHERE player_id = ?", playerID)
-			_, _ = statStmt.Exec(playerID, p.Kills, p.Deaths, p.Assists, p.CS, p.Points)
-		}
-	}
-
-	log.Println("[DUMMY DATA] Successfully seeded database with mock rosters and statistics!")
+	log.Println("[SEED DATA] Successfully seeded database from seed.sql!")
 }
 
 // setupRoutes registers all application endpoints on a new ServeMux
@@ -157,14 +116,18 @@ func main() {
 	}
 	defer db.Close()
 
-	// --- Startup Prompt & Data Ingestion Decision ---
+	// --- Startup Ingestion Prompt ---
+	// The database is already seeded inside InitDB(). This prompt only runs
+	// when INGEST_REMOTE=true and asks whether to kick off a live sync
+	// against the Leaguepedia API in the background. Saying no (or pressing
+	// Enter) starts the server immediately with the existing seeded data.
 	if os.Getenv("INGEST_REMOTE") == "true" {
 		fmt.Println("\n==================================================================")
-		fmt.Println("⚠️  WARNING: Live remote data ingestion from Leaguepedia Cargo API")
-		fmt.Println("   is enabled. Due to Fandom rate limits and retry pacing,")
-		fmt.Println("   this process may take SEVERAL MINUTES to complete.")
+		fmt.Println("⚠️  Live remote data ingestion from Leaguepedia Cargo API is")
+		fmt.Println("   enabled. Due to Fandom rate limits and retry pacing, this")
+		fmt.Println("   process may take SEVERAL MINUTES to complete.")
 		fmt.Println("==================================================================")
-		fmt.Print("Would you like to run live data ingestion now? (y/N): ")
+		fmt.Print("Run live data ingestion now? (y/N): ")
 
 		reader := bufio.NewReader(os.Stdin)
 		input, _ := reader.ReadString('\n')
@@ -172,7 +135,7 @@ func main() {
 
 		if input == "y" || input == "yes" {
 			go func() {
-				log.Println("Starting background live data ingestion...")
+				log.Println("[INGEST] Starting background live data ingestion...")
 				if err := TriggerLiveIngestion(db); err != nil {
 					log.Printf("[INGEST ERROR] Live data ingestion failed: %v", err)
 				} else {
@@ -180,12 +143,8 @@ func main() {
 				}
 			}()
 		} else {
-			log.Println("Skipping live data ingestion. Seeding dummy data instead...")
-			SeedDummyData(db)
+			log.Println("[STARTUP] Live ingestion skipped — server starting with seeded data.")
 		}
-	} else {
-		log.Println("INGEST_REMOTE is disabled. Seeding database with local/dummy content...")
-		SeedDummyData(db)
 	}
 
 	mux := setupRoutes(db)
