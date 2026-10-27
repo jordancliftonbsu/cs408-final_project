@@ -76,8 +76,17 @@ say "Initializing .env configuration file"
 
 if [ ! -f "$APP_DIR/.env" ]; then
     cat <<'EOF' > "$APP_DIR/.env"
+# Server Configuration
 PORT=8080
 DB_PATH=/home/ubuntu/fantasylol/data/fantasylol.db
+INGEST_REMOTE=false
+
+# Fandom / Leaguepedia API Bot Credentials
+# REQUIRED for live ingestion (./ingest.sh). Fill these in with a Fandom
+# bot account (Special:BotPasswords). Without them /admin/stats/update
+# returns HTTP 500 with "FANDOM_USERNAME or FANDOM_BOT_PASS ... missing".
+FANDOM_USERNAME=
+FANDOM_BOT_PASS=
 EOF
 fi
 
@@ -142,8 +151,14 @@ Installed files & structure:
   - App root:       $APP_DIR
   - Static files:   $APP_DIR/public
   - SQLite data:    $APP_DIR/data
+  - Env file:       $APP_DIR/.env
   - Systemd config: /etc/systemd/system/${APP_NAME}.service
   - Nginx config:   /etc/nginx/conf.d/${APP_NAME}.conf
+
+IMPORTANT: Live ingestion (./ingest.sh) needs Fandom bot credentials.
+Edit $APP_DIR/.env and set FANDOM_USERNAME and FANDOM_BOT_PASS, then run:
+    sudo systemctl restart ${APP_NAME}
+Without them, /admin/stats/update returns HTTP 500.
 
 Next step: Deploy your code using deploy/configure_app.sh from your local machine.
 

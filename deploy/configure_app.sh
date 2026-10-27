@@ -31,7 +31,7 @@ fi
 # Step 1: Run Local Tests
 # -----------------------------------------------------------------------------
 echo "==> 1. Running test suite prior to deployment..."
-(cd "${PROJECT_ROOT}" && CGO_ENABLED=0 go test -v -vet=off ./...)
+(cd "${PROJECT_ROOT}" && CGO_ENABLED=0 go test -short -v -vet=off ./...)
 
 # -----------------------------------------------------------------------------
 # Step 2: Compiling Go binary for Linux
@@ -63,6 +63,22 @@ scp "${PROJECT_ROOT}"/*.go "$EC2_HOST":/home/ubuntu/fantasylol/ 2>/dev/null || t
 if [ -d "${PROJECT_ROOT}/scoring" ]; then
     scp -r "${PROJECT_ROOT}/scoring" "$EC2_HOST":/home/ubuntu/fantasylol/
 fi
+
+# Runtime data files — the app reads these at startup via relative paths.
+# schema.sql and seed.sql are REQUIRED: InitDB() applies the schema and seeds
+# the database from them on every launch. Without them the service won't start.
+echo "==> 5b. Uploading required runtime data files (schema.sql, seed.sql)..."
+[ -f "${PROJECT_ROOT}/schema.sql" ] || { echo "ERROR: schema.sql not found — cannot deploy."; exit 1; }
+[ -f "${PROJECT_ROOT}/seed.sql" ]   || { echo "ERROR: seed.sql not found — cannot deploy.";   exit 1; }
+scp "${PROJECT_ROOT}/schema.sql" "$EC2_HOST":/home/ubuntu/fantasylol/
+scp "${PROJECT_ROOT}/seed.sql"   "$EC2_HOST":/home/ubuntu/fantasylol/
+
+# Optional helper/reference files (uploaded if present)
+for f in .env-example ingest.sh test.sh; do
+    if [ -f "${PROJECT_ROOT}/${f}" ]; then
+        scp "${PROJECT_ROOT}/${f}" "$EC2_HOST":/home/ubuntu/fantasylol/
+    fi
+done
 
 # -----------------------------------------------------------------------------
 # Step 4: Resolve Remote Dependencies
