@@ -98,11 +98,87 @@ func setupRoutes(db *sql.DB) *http.ServeMux {
 	mux.HandleFunc("/admin/stats/reset-date", adminHandler.ResetStatsDateHandler)
 	mux.HandleFunc("/admin/leaderboard/calculate", adminHandler.CalculateLeaderboardHandler)
 
+	// Page Routes
+	// These pages are not implemented yet. Each currently renders a shared
+	// "coming soon" placeholder.
+	//
+	// Exact-match patterns (no trailing slash) only match that precise path,
+	// so they take precedence over the "/" static file server below.
+	mux.HandleFunc("/login", comingSoonHandler("Log In / Sign Up"))
+	mux.HandleFunc("/leagues-search", comingSoonHandler("Search Leagues"))
+	mux.HandleFunc("/league", comingSoonHandler("League"))
+	mux.HandleFunc("/create-league", comingSoonHandler("Create / Edit League"))
+	mux.HandleFunc("/edit-team", comingSoonHandler("Edit Team"))
+	mux.HandleFunc("/pro-player-search", comingSoonHandler("Pro Player Search"))
+	mux.HandleFunc("/my-leagues", comingSoonHandler("My Leagues"))
+
 	// Static File Server
+	// Mounted at "/" so it serves index.html for the root and any other
+	// static assets (CSS, images, etc.) not claimed by an explicit route above.
 	fs := http.FileServer(http.Dir("./public"))
 	mux.Handle("/", fs)
 
 	return mux
+}
+
+// comingSoonHandler returns an http.HandlerFunc that renders a simple
+// placeholder page for a not-yet-implemented route. The pageName is shown
+// to the user so it's clear which feature is pending.
+func comingSoonHandler(pageName string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprintf(w, `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>%s — Coming Soon | FantasyLoL</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #0f1419;
+            color: #e6e6e6;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            text-align: center;
+        }
+        .card {
+            padding: 2.5rem 3rem;
+            border: 1px solid #2a2f3a;
+            border-radius: 12px;
+            background: #161b22;
+            max-width: 480px;
+        }
+        h1 { margin: 0 0 0.5rem; font-size: 1.75rem; }
+        .badge {
+            display: inline-block;
+            margin-bottom: 1rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: 999px;
+            background: #1f6feb;
+            color: #fff;
+            font-size: 0.8rem;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+        p { color: #9da5b4; line-height: 1.5; }
+        a { color: #58a6ff; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <span class="badge">Coming Soon</span>
+        <h1>%s</h1>
+        <p>This page is under construction and will be available soon.</p>
+        <p><a href="/">&larr; Back to home</a></p>
+    </div>
+</body>
+</html>`, pageName, pageName)
+	}
 }
 
 func main() {
