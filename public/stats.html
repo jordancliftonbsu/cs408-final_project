@@ -4,47 +4,52 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FantasyLoL - Pro Player Stats</title>
-    <link rel="stylesheet" href="/css/styles.css">
-    <style>
-        body { font-family: Arial, sans-serif; margin: 2rem; background-color: #f4f6f9; color: #333; }
-        h1 { color: #1e293b; }
-        .stats-table { width: 100%; border-collapse: collapse; margin-top: 1rem; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-radius: 6px; overflow: hidden; }
-        .stats-table th, .stats-table td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; vertical-align: middle; }
-        .stats-table th { background-color: #0f172a; color: #fff; text-transform: uppercase; font-size: 0.85rem; letter-spacing: 0.05em; }
-        .stats-table tr:hover { background-color: #f8fafc; }
-        .player-cell { display: flex; align-items: center; gap: 10px; }
-        .player-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; background-color: #cbd5e1; flex-shrink: 0; }
-        .badge-win { color: #16a34a; font-weight: bold; }
-        .badge-loss { color: #dc2626; font-weight: bold; }
-        .badge-none { color: #94a3b8; font-weight: bold; }
-        .fp-col { font-weight: bold; color: #2563eb; }
-        .loading { text-align: center; color: #64748b; padding: 2rem; }
-    </style>
-</head>
-<body>
-    <h1>Ingested Pro Player Stats</h1>
-    <p>Displaying recent pro player performances imported from Leaguepedia.</p>
 
-    <table class="stats-table">
-        <thead>
-            <tr>
-                <th>Date</th>
-                <th>Player</th>
-                <th>Team</th>
-                <th>Role</th>
-                <th>Region</th>
-                <th>K / D / A</th>
-                <th>CS</th>
-                <th>Result</th>
-                <th>Fantasy Points</th>
-            </tr>
-        </thead>
-        <tbody id="stats-body">
-            <tr>
-                <td colspan="9" class="loading">Loading stats...</td>
-            </tr>
-        </tbody>
-    </table>
+    <!-- Bootstrap 5 CSS CDN (base framework) -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Shared custom dark theme (must load after Bootstrap) -->
+    <link href="/css/styles.css" rel="stylesheet">
+
+    <!-- Shared header/footer loader -->
+    <script src="/js/layout.js" defer></script>
+</head>
+<body class="min-vh-100 d-flex flex-column">
+
+    <div data-include="header"></div>
+
+    <main class="container py-4">
+        <h1 class="mb-1">Ingested Pro Player Stats</h1>
+        <p class="text-muted">Displaying recent pro player performances imported from Leaguepedia.</p>
+
+        <div class="table-responsive">
+            <table class="stats-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Player</th>
+                        <th>Team</th>
+                        <th>Role</th>
+                        <th>Region</th>
+                        <th>K / D / A</th>
+                        <th>CS</th>
+                        <th>Result</th>
+                        <th>Fantasy Points</th>
+                    </tr>
+                </thead>
+                <tbody id="stats-body">
+                    <tr>
+                        <td colspan="9" class="state-cell">Loading stats...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <div data-include="footer"></div>
+
+    <!-- Bootstrap 5 JS bundle (needed for collapsible navbar) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
         function formatDate(dateStr) {
@@ -58,13 +63,13 @@
             try {
                 const response = await fetch('/api/stats');
                 if (!response.ok) throw new Error('Failed to fetch stats');
-                
+
                 const stats = await response.json();
-                
+
                 if (!stats || stats.length === 0) {
                     tbody.innerHTML = `
                         <tr>
-                            <td colspan="9" style="text-align: center; color: #64748b;">
+                            <td colspan="9" class="state-cell">
                                 No match stats ingested yet. Trigger an update via <code>POST /admin/stats/update</code>.
                             </td>
                         </tr>`;
@@ -72,14 +77,16 @@
                 }
 
                 tbody.innerHTML = stats.map(s => {
-                    const avatarSrc = s.image_url || 'https://via.placeholder.com/32?text=?';
+                    // Player pictures temporarily disabled (no images imported yet).
+                    // Re-enable by uncommenting this line and the <img> in the player cell below.
+                    // const avatarSrc = s.image_url || 'https://via.placeholder.com/32?text=?';
                     const formattedDate = formatDate(s.match_date);
                     const fp = typeof s.fantasy_points === 'number' ? s.fantasy_points.toFixed(2) : '0.00';
 
                     let resultBadge = '<span class="badge-none">-</span>';
                     if (s.match_date) {
-                        resultBadge = s.win === 1 
-                            ? '<span class="badge-win">WIN</span>' 
+                        resultBadge = s.win === 1
+                            ? '<span class="badge-win">WIN</span>'
                             : '<span class="badge-loss">LOSS</span>';
                     }
 
@@ -88,7 +95,10 @@
                             <td>${formattedDate}</td>
                             <td>
                                 <div class="player-cell">
-                                    <img src="${avatarSrc}" alt="${s.handle}" class="player-avatar" onerror="this.src='https://via.placeholder.com/32?text=?';">
+                                    <!-- Player picture temporarily disabled (no images imported yet).
+                                         Re-enable together with the avatarSrc line above:
+                                    <img src="\${avatarSrc}" alt="\${s.handle}" class="player-avatar" onerror="this.src='https://via.placeholder.com/32?text=?';">
+                                    -->
                                     <strong>${s.handle}</strong>
                                 </div>
                             </td>
@@ -105,7 +115,7 @@
             } catch (err) {
                 tbody.innerHTML = `
                     <tr>
-                        <td colspan="9" style="text-align: center; color: #dc2626;">
+                        <td colspan="9" class="state-cell is-error">
                             Error loading player statistics.
                         </td>
                     </tr>`;

@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Log In / Register — FantasyLoL</title>
+
+    <!-- Bootstrap 5 CSS CDN (base framework) -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Shared custom dark theme (must load after Bootstrap) -->
+    <link href="/css/styles.css" rel="stylesheet">
+
+    <!-- Shared header/footer loader -->
+    <script src="/js/layout.js" defer></script>
+</head>
+<body class="min-vh-100 d-flex flex-column">
+
+    <div data-include="header"></div>
+
+    <main class="auth-wrap flex-grow-1">
+        <div class="card card-dark p-4 p-md-5 shadow-lg auth-card">
+
+            <!-- ============ LOGIN FORM ============ -->
+            <section id="login-section">
+                <h1 class="h3 text-accent mb-4 text-center">Log In</h1>
+                <form id="login-form" novalidate>
+                    <div class="mb-3">
+                        <label for="login-username" class="form-label">Username</label>
+                        <input type="text" class="form-control" id="login-username"
+                               name="username" autocomplete="username" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="login-password" class="form-label">Password</label>
+                        <input type="password" class="form-control" id="login-password"
+                               name="password" autocomplete="current-password" required>
+                    </div>
+                    <div id="login-message" class="auth-message mb-2" role="alert" aria-live="polite"></div>
+                    <button type="submit" class="btn btn-accent w-100">Log In</button>
+                </form>
+                <p class="text-muted text-center mt-3 mb-0">
+                    Need an account?
+                    <button type="button" class="link-toggle" id="show-register">Register</button>
+                </p>
+            </section>
+
+            <!-- ============ REGISTER FORM ============ -->
+            <section id="register-section" hidden>
+                <h1 class="h3 text-accent mb-4 text-center">Create Account</h1>
+                <form id="register-form" novalidate>
+                    <div class="mb-3">
+                        <label for="register-username" class="form-label">Username</label>
+                        <input type="text" class="form-control" id="register-username"
+                               name="username" autocomplete="username" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="register-email" class="form-label">Email</label>
+                        <input type="email" class="form-control" id="register-email"
+                               name="email" autocomplete="email" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="register-password" class="form-label">Password</label>
+                        <input type="password" class="form-control" id="register-password"
+                               name="password" autocomplete="new-password" required>
+                        <div class="form-text text-muted">At least 8 characters.</div>
+                    </div>
+                    <div id="register-message" class="auth-message mb-2" role="alert" aria-live="polite"></div>
+                    <button type="submit" class="btn btn-accent w-100">Create Account</button>
+                </form>
+                <p class="text-muted text-center mt-3 mb-0">
+                    Already have an account?
+                    <button type="button" class="link-toggle" id="show-login">Log in</button>
+                </p>
+            </section>
+
+        </div>
+    </main>
+
+    <div data-include="footer"></div>
+
+    <!-- Bootstrap 5 JS bundle (needed for collapsible navbar) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        // Where to send the user after a successful login/registration.
+        const REDIRECT_AFTER_AUTH = '/';
+
+        const loginSection = document.getElementById('login-section');
+        const registerSection = document.getElementById('register-section');
+        const loginMessage = document.getElementById('login-message');
+        const registerMessage = document.getElementById('register-message');
+
+        // --- Toggle between the two forms without reloading the page ---
+        function showRegister() {
+            loginSection.hidden = true;
+            registerSection.hidden = false;
+            clearMessages();
+            document.getElementById('register-username').focus();
+        }
+        function showLogin() {
+            registerSection.hidden = true;
+            loginSection.hidden = false;
+            clearMessages();
+            document.getElementById('login-username').focus();
+        }
+        document.getElementById('show-register').addEventListener('click', showRegister);
+        document.getElementById('show-login').addEventListener('click', showLogin);
+
+        function clearMessages() {
+            setMessage(loginMessage, '', '');
+            setMessage(registerMessage, '', '');
+        }
+
+        function setMessage(el, text, kind) {
+            el.textContent = text;
+            el.classList.remove('is-error', 'is-success');
+            if (kind) el.classList.add(kind);
+        }
+
+        // Parse a JSON error body, falling back to a generic message.
+        async function errorText(response) {
+            try {
+                const data = await response.json();
+                return data.error || 'Something went wrong. Please try again.';
+            } catch {
+                return 'Something went wrong. Please try again.';
+            }
+        }
+
+        // --- Login submit (fetch, no reload) ---
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            setMessage(loginMessage, '', '');
+
+            const payload = {
+                username: document.getElementById('login-username').value.trim(),
+                password: document.getElementById('login-password').value,
+            };
+
+            try {
+                const res = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                if (res.ok) {
+                    setMessage(loginMessage, 'Logged in! Redirecting...', 'is-success');
+                    window.location.href = REDIRECT_AFTER_AUTH;
+                    return;
+                }
+                setMessage(loginMessage, await errorText(res), 'is-error');
+            } catch {
+                setMessage(loginMessage, 'Network error. Please try again.', 'is-error');
+            }
+        });
+
+        // --- Register submit (fetch, no reload) ---
+        document.getElementById('register-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            setMessage(registerMessage, '', '');
+
+            const payload = {
+                username: document.getElementById('register-username').value.trim(),
+                email: document.getElementById('register-email').value.trim(),
+                password: document.getElementById('register-password').value,
+            };
+
+            try {
+                const res = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                if (res.ok) {
+                    setMessage(registerMessage, 'Account created! Redirecting...', 'is-success');
+                    window.location.href = REDIRECT_AFTER_AUTH;
+                    return;
+                }
+                setMessage(registerMessage, await errorText(res), 'is-error');
+            } catch {
+                setMessage(registerMessage, 'Network error. Please try again.', 'is-error');
+            }
+        });
+    </script>
+</body>
+</html>

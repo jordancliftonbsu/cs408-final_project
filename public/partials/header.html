@@ -1,0 +1,30 @@
+<!--
+  Shared site header / navbar.
+  Injected into every page by /js/layout.js at the element <div data-include="header"></div>.
+  Edit the site navigation HERE ONLY — never copy this markup into individual pages.
+-->
+<nav class="navbar navbar-expand-lg navbar-custom sticky-top">
+  <div class="container">
+    <a class="navbar-brand brand-accent" href="/">🎮 FantasyLoL</a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav"
+            aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="mainNav">
+      <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+        <li class="nav-item"><a class="nav-link text-light" href="/">Home</a></li>
+        <li class="nav-item"><a class="nav-link text-light" href="/stats.html">Pro Stats</a></li>
+        <li class="nav-item"><a class="nav-link text-light" href="/leagues-search">Leagues</a></li>
+        <li class="nav-item"><a class="nav-link text-light" href="/my-leagues">My Leagues</a></li>
+        <li class="nav-item"><a class="nav-link text-light" href="/pro-player-search">Players</a></li>
+
+        <!-- Auth slot: replaced by /js/layout.js once the session is known.
+             Defaults to the logged-out "Log In" button so it renders sensibly
+             even before the /api/auth/me check completes. -->
+        <li class="nav-item ms-lg-2" id="nav-auth">
+          <a class="btn btn-accent btn-sm" href="/login">Log In</a>
+        </li>
+      </ul>
+    </div>
+  </div>
+</nav>

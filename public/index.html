@@ -5,22 +5,158 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FantasyLoL</title>
 
-    <!-- Bootstrap 5 CSS CDN -->
+    <!-- Bootstrap 5 CSS CDN (base framework) -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    
-    <!-- Custom Dark/Gold/Red CSS -->
+
+    <!-- Shared custom dark theme (must load after Bootstrap) -->
     <link href="/css/styles.css" rel="stylesheet">
+
+    <!-- Shared header/footer loader -->
+    <script src="/js/layout.js" defer></script>
 </head>
-<body class="min-vh-100 d-flex flex-column justify-content-center align-items-center text-center p-4">
+<body class="min-vh-100 d-flex flex-column">
 
-    <div class="card card-dark p-5 shadow-lg max-w-md">
-        <h1 class="display-5 fw-bold text-gold mb-3">🎮 FantasyLoL</h1>
-        <p class="lead text-light mb-4">Hello World!</p>
-        <div>
-            <span class="badge badge-gold">Frontend Live</span>
-            <span class="badge badge-live ms-2">Test!</span>
-        </div>
-    </div>
+    <div data-include="header"></div>
 
+    <main>
+        <!-- Hero banner: full-bleed image with 35% black overlay + centered text.
+             Only the background-image URL is inline; all styling lives in .hero. -->
+        <section class="hero" style="background-image: url('/media/T1-hero.jpg');">
+            <div class="hero-content">
+                <h1 class="hero-title">FantasyLoL</h1>
+                <p class="hero-subtitle">The premier League of Legends eSports fantasy platform</p>
+                <a class="btn btn-accent btn-lg" href="/leagues-search">View Leagues</a>
+            </div>
+        </section>
+
+        <!-- About section -->
+        <section class="container py-5">
+            <h2 class="section-heading">What is FantasyLoL?</h2>
+            <p>
+                FantasyLoL brings the thrill of fantasy sports to competitive
+                League of Legends. Instead of real-world athletes, you draft
+                professional LoL players from the pro circuit and assemble your
+                own fantasy roster.
+            </p>
+            <p>
+                As the pros compete in live tournaments, their in-game
+                performance — kills, deaths, assists, creep score, wins, and
+                more — is converted into fantasy points for the players on your
+                team. The better your drafted pros play, the more points you
+                earn.
+            </p>
+            <p>
+                Create or join leagues with friends, compete week to week, and
+                climb the leaderboard to prove you know the pro scene better
+                than anyone else. Whether you follow the LCK, LEC, LCS, or any
+                other region, FantasyLoL turns every match into a chance to win.
+            </p>
+        </section>
+
+        <!-- Dashboard: leaderboard (left) + user leagues / login prompt (right) -->
+        <section class="container pb-5">
+            <div class="row g-4">
+                <!-- Left: sitewide leaderboard -->
+                <div class="col-12 col-lg-6">
+                    <div class="card card-dark h-100 p-4">
+                        <h2 class="section-heading h4">Sitewide Leaderboard</h2>
+                        <p class="text-muted">
+                            Top fantasy teams across all active league tournaments.
+                        </p>
+                        <div class="panel-empty">
+                            No active tournaments yet. Once leagues are underway,
+                            the highest-scoring fantasy teams will appear here.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: user's leagues (logged in) OR login/register prompt.
+                     Filled by the page script below based on the session. The
+                     default content is the logged-out prompt so it renders
+                     sensibly before the session check completes. -->
+                <div class="col-12 col-lg-6">
+                    <div class="card card-dark h-100 p-4">
+                        <h2 class="section-heading h4">My Leagues</h2>
+                        <div id="my-leagues-body">
+                            <div class="panel-empty">
+                                <p class="mb-3">
+                                    Log in or create an account to see the leagues
+                                    you've joined.
+                                </p>
+                                <div class="d-flex gap-2 justify-content-center flex-wrap">
+                                    <a class="btn btn-accent" href="/login">Log In</a>
+                                    <a class="btn btn-outline-accent" href="/login">Register</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <div data-include="footer"></div>
+
+    <!-- Bootstrap 5 JS bundle (needed for collapsible navbar) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        // Render the "My Leagues" panel based on the current session.
+        // Uses FL.getCurrentUser() from /js/layout.js (shared, cached).
+        function escapeHtml(str) {
+            return String(str).replace(/[&<>"']/g, (c) => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[c]));
+        }
+
+        function renderLeagues(leagues) {
+            if (!leagues.length) {
+                return `
+                    <div class="panel-empty">
+                        You're not in any leagues yet.
+                        <div class="mt-3 d-flex gap-2 justify-content-center flex-wrap">
+                            <a class="btn btn-accent" href="/leagues-search">Find a League</a>
+                            <a class="btn btn-outline-accent" href="/create-league">Create a League</a>
+                        </div>
+                    </div>`;
+            }
+            const items = leagues.map((lg) => `
+                <a class="list-group-item list-group-item-action bg-transparent border-0 px-0 d-flex justify-content-between align-items-center"
+                   href="/league?id=${encodeURIComponent(lg.league_id)}">
+                    <span>
+                        <strong class="text-accent">${escapeHtml(lg.name)}</strong><br>
+                        <small class="text-muted">${escapeHtml(lg.team_name)} · ${lg.wins}W-${lg.losses}L</small>
+                    </span>
+                    <span class="fp-col">${lg.total_points.toFixed(2)} pts</span>
+                </a>`).join('');
+            return `<div class="list-group list-group-flush">${items}</div>`;
+        }
+
+        async function loadMyLeagues() {
+            const body = document.getElementById('my-leagues-body');
+            if (!body) return;
+
+            const user = await (window.FL ? window.FL.getCurrentUser() : Promise.resolve(null));
+            if (!user) {
+                // Not logged in — keep the default login/register prompt.
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/leagues/mine', { headers: { Accept: 'application/json' } });
+                if (!res.ok) {
+                    // Session expired between checks, or server error — fall back
+                    // to the prompt rather than showing a broken panel.
+                    return;
+                }
+                const leagues = await res.json();
+                body.innerHTML = renderLeagues(leagues);
+            } catch (err) {
+                console.error('[home] failed to load leagues:', err);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', loadMyLeagues);
+    </script>
 </body>
 </html>

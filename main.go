@@ -79,8 +79,19 @@ func setupRoutes(db *sql.DB) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	adminHandler := &AdminHandler{DB: db}
+	authHandler := &AuthHandler{DB: db}
 
 	mux.HandleFunc("/api/stats", StatsAPIHandler(db))
+
+	// Authentication Endpoints
+	mux.HandleFunc("/api/auth/register", authHandler.RegisterHandler)
+	mux.HandleFunc("/api/auth/login", authHandler.LoginHandler)
+	mux.HandleFunc("/api/auth/logout", authHandler.LogoutHandler)
+	mux.HandleFunc("/api/auth/me", authHandler.MeHandler)
+
+	// League Endpoints
+	leaguesHandler := &LeaguesHandler{DB: db, Auth: authHandler}
+	mux.HandleFunc("/api/leagues/mine", leaguesHandler.MyLeaguesHandler)
 
 	// Health & Utility Endpoints
 	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
@@ -104,7 +115,11 @@ func setupRoutes(db *sql.DB) *http.ServeMux {
 	//
 	// Exact-match patterns (no trailing slash) only match that precise path,
 	// so they take precedence over the "/" static file server below.
-	mux.HandleFunc("/login", comingSoonHandler("Log In / Sign Up"))
+	// Login / registration page (static file, served for the clean /login URL)
+	mux.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "./public/login.html")
+	})
+
 	mux.HandleFunc("/leagues-search", comingSoonHandler("Search Leagues"))
 	mux.HandleFunc("/league", comingSoonHandler("League"))
 	mux.HandleFunc("/create-league", comingSoonHandler("Create / Edit League"))

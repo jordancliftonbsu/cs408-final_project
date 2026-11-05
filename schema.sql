@@ -80,6 +80,18 @@ CREATE TABLE IF NOT EXISTS system_settings (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 7b. Sessions Table
+--    One row per active login session. The session token is a random,
+--    opaque string stored in an HttpOnly cookie on the client. Rows are
+--    deleted on logout and ignored/cleaned up once expires_at passes.
+CREATE TABLE IF NOT EXISTS sessions (
+    token      TEXT PRIMARY KEY,
+    user_id    INTEGER NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    expires_at DATETIME NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(user_id)
+);
+
 -- 8. Leaguepedia Tournaments Table
 --    One row per tournament we have ever ingested from.
 --    overview_page is the canonical Leaguepedia wiki-path key (e.g.
