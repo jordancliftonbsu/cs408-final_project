@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FantasyLoL - Leagues</title>
+
+    <!-- Bootstrap 5 CSS CDN (base framework) -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Shared custom dark theme (must load after Bootstrap) -->
+    <link href="/css/styles.css" rel="stylesheet">
+
+    <!-- Shared header/footer loader -->
+    <script src="/js/layout.js" defer></script>
+</head>
+<body class="min-vh-100 d-flex flex-column">
+
+    <div data-include="header"></div>
+
+    <main class="container py-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+            <h1 class="mb-0">Leagues</h1>
+            <a class="btn btn-accent" href="/edit-league">Create League</a>
+        </div>
+
+        <div class="mb-3">
+            <a class="filter-toggle" data-bs-toggle="collapse" href="#filter-panel" role="button"
+               aria-expanded="false" aria-controls="filter-panel">
+                <span class="filter-toggle-icon" aria-hidden="true">&#9656;</span> Filter Leagues
+            </a>
+            <p class="text-muted mb-0">Search by name, ID, privacy, open slots or status.</p>
+        </div>
+
+        <div class="collapse" id="filter-panel">
+            <form id="filter-form" class="card-dark form-dark p-3 mb-3" novalidate>
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label for="f-id" class="form-label">League ID</label>
+                        <input type="number" min="1" step="1" class="form-control" id="f-id"
+                               placeholder="Overrides all other filters">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="f-name" class="form-label">Name</label>
+                        <input type="text" class="form-control" id="f-name" maxlength="255" placeholder="Search by name">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="f-privacy" class="form-label">Privacy</label>
+                        <select class="form-select" id="f-privacy">
+                            <option value="" selected>Any</option>
+                            <option value="public">Public</option>
+                            <option value="private">Private</option>
+                        </select>
+                    </div>
+                    <div class="col-12 d-flex flex-wrap gap-4">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="f-open">
+                            <label class="form-check-label" for="f-open">Has open slots</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="f-notstarted">
+                            <label class="form-check-label" for="f-notstarted">Not started</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="f-concluded">
+                            <label class="form-check-label" for="f-concluded">Include concluded leagues</label>
+                        </div>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-accent mt-3">Search</button>
+            </form>
+        </div>
+
+        <div class="form-message mb-2" id="action-message" role="status"></div>
+
+        <div class="table-responsive">
+            <table class="stats-table is-striped">
+                <thead>
+                    <tr>
+                        <th>League ID</th>
+                        <th>Name</th>
+                        <th>Privacy</th>
+                        <th>Owner</th>
+                        <th>Open slots</th>
+                        <th>Status</th>
+                        <th><span class="visually-hidden">Actions</span></th>
+                    </tr>
+                </thead>
+                <tbody id="leagues-body" aria-live="polite">
+                    <tr><td colspan="7" class="state-cell">Loading leagues...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <nav aria-label="Leagues pagination" class="mt-3">
+            <ul class="pagination pagination-dark justify-content-center" id="pagination"></ul>
+        </nav>
+    </main>
+
+    <div data-include="footer"></div>
+
+    <!-- Password prompt for joining a private league -->
+    <div class="modal fade modal-dark" id="join-modal" tabindex="-1" aria-labelledby="join-modal-title" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <form class="modal-content form-dark" id="join-form">
+                <div class="modal-header">
+                    <h2 class="modal-title h5" id="join-modal-title">Join <span id="join-league-name"></span></h2>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <label for="join-password" class="form-label">This league is private. Enter its password.</label>
+                    <input type="password" class="form-control" id="join-password" maxlength="72"
+                           autocomplete="off" required>
+                    <div class="form-message is-error mt-2" id="join-error" role="alert"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-accent" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-accent">Join</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Bootstrap 5 JS bundle (navbar + collapsible filter) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        // Filters applied by the last Search click. Pagination reuses these so
+        // editing the form without pressing Search does not change page results.
+        let activeFilters = new URLSearchParams();
+
+        function esc(str) {
+            return String(str).replace(/[&<>"']/g, c => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[c]));
+        }
+
+        function readFilters() {
+            const p = new URLSearchParams();
+            const id = document.getElementById('f-id').value.trim();
+            if (id) {
+                // League ID wins: every other filter is ignored.
+                p.set('id', id);
+                return p;
+            }
+            const name = document.getElementById('f-name').value.trim();
+            const privacy = document.getElementById('f-privacy').value;
+            if (name) p.set('name', name);
+            if (privacy) p.set('privacy', privacy);
+            if (document.getElementById('f-open').checked) p.set('open_slots', '1');
+            if (document.getElementById('f-notstarted').checked) p.set('not_started', '1');
+            if (document.getElementById('f-concluded').checked) p.set('include_concluded', '1');
+            return p;
+        }
+
+        function showState(message, isError) {
+            document.getElementById('leagues-body').innerHTML =
+                `<tr><td colspan="7" class="state-cell${isError ? ' is-error' : ''}">${esc(message)}</td></tr>`;
+            document.getElementById('pagination').innerHTML = '';
+        }
+
+        function renderPagination(page, totalPages) {
+            const ul = document.getElementById('pagination');
+            if (totalPages <= 1) { ul.innerHTML = ''; return; }
+            const item = (label, target, disabled, active) => `
+                <li class="page-item${disabled ? ' disabled' : ''}${active ? ' active' : ''}">
+                    <button type="button" class="page-link" data-page="${target}"
+                            ${disabled ? 'disabled' : ''} ${active ? 'aria-current="page"' : ''}>${label}</button>
+                </li>`;
+            let html = item('Previous', page - 1, page <= 1, false);
+            for (let i = 1; i <= totalPages; i++) html += item(i, i, false, i === page);
+            html += item('Next', page + 1, page >= totalPages, false);
+            ul.innerHTML = html;
+        }
+
+        let currentPage = 1;
+        let pendingJoin = null; // { id, name } while the password modal is open
+
+        function joinButton(l) {
+            if (l.joined) {
+                // Owners must transfer or delete instead of leaving.
+                return l.is_owner
+                    ? `<button type="button" class="btn btn-red btn-sm" disabled
+                               title="Owners can't leave. Transfer ownership or delete the league.">Leave</button>`
+                    : `<button type="button" class="btn btn-red btn-sm" data-action="leave" data-id="${l.league_id}">Leave</button>`;
+            }
+            if (l.open_slots <= 0) {
+                return `<button type="button" class="btn btn-accent btn-sm" disabled
+                                title="This league is full.">Full</button>`;
+            }
+            if (l.days_until !== null && l.days_until <= 0) {
+                return `<button type="button" class="btn btn-accent btn-sm" disabled
+                                title="This league has started and is closed to new players.">Join</button>`;
+            }
+            return `<button type="button" class="btn btn-accent btn-sm" data-action="join"
+                            data-id="${l.league_id}" data-private="${l.privacy === 'Private'}"
+                            data-name="${esc(l.name)}">Join</button>`;
+        }
+
+        function startsIn(days, concluded) {
+            if (concluded) return 'Concluded';
+            if (days === null || days === undefined) return 'TBD';
+            if (days <= 0) return 'Already started';
+            return `Starts in ${days} ${days === 1 ? 'day' : 'days'}`;
+        }
+
+        function setActionMessage(text, kind) {
+            const el = document.getElementById('action-message');
+            el.textContent = text;
+            el.className = 'form-message mb-2' + (kind ? ' is-' + kind : '');
+        }
+
+        // POST to a join/leave endpoint; returns { ok, error }.
+        async function membershipRequest(id, action, body) {
+            const res = await fetch(`/api/leagues/${id}/${action}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body || {}),
+            });
+            const data = await res.json().catch(() => ({}));
+            return { ok: res.ok, status: res.status, error: data.error || 'Something went wrong.' };
+        }
+
+        async function handleMembership(btn) {
+            const id = btn.dataset.id;
+            const user = await FL.getCurrentUser();
+            if (!user) { window.location.href = '/login'; return; }
+            setActionMessage('', '');
+
+            if (btn.dataset.action === 'join' && btn.dataset.private === 'true') {
+                pendingJoin = { id, name: btn.dataset.name };
+                document.getElementById('join-league-name').textContent = btn.dataset.name;
+                document.getElementById('join-password').value = '';
+                document.getElementById('join-error').textContent = '';
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('join-modal')).show();
+                return;
+            }
+
+            btn.disabled = true;
+            const r = await membershipRequest(id, btn.dataset.action);
+            if (r.ok) {
+                setActionMessage(btn.dataset.action === 'join' ? 'You joined the league.' : 'You left the league.', 'success');
+            } else {
+                setActionMessage(r.error, 'error');
+            }
+            loadLeagues(currentPage);
+        }
+
+        async function submitJoinPassword(e) {
+            e.preventDefault();
+            if (!pendingJoin) return;
+            const errEl = document.getElementById('join-error');
+            errEl.textContent = '';
+            const r = await membershipRequest(pendingJoin.id, 'join', {
+                password: document.getElementById('join-password').value,
+            });
+            if (!r.ok) { errEl.textContent = r.error; return; }
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('join-modal')).hide();
+            pendingJoin = null;
+            setActionMessage('You joined the league.', 'success');
+            loadLeagues(currentPage);
+        }
+
+        async function loadLeagues(page) {
+            currentPage = page;
+            const params = new URLSearchParams(activeFilters);
+            params.set('page', page);
+            try {
+                const res = await fetch('/api/leagues?' + params.toString());
+                const data = await res.json();
+                if (!res.ok) { showState(data.error || 'Error loading leagues.', true); return; }
+
+                if (!data.leagues.length) {
+                    showState('No leagues match your search.', false);
+                    return;
+                }
+                document.getElementById('leagues-body').innerHTML = data.leagues.map(l => `
+                    <tr>
+                        <td>${l.league_id}</td>
+                        <td><strong>${esc(l.name)}</strong></td>
+                        <td>${esc(l.privacy)}</td>
+                        <td>${esc(l.owner)}</td>
+                        <td>${l.open_slots > 0 ? l.open_slots : 'Full'}</td>
+                        <td>${startsIn(l.days_until, l.concluded)}</td>
+                        <td>
+                            <div class="d-flex gap-2">
+                                <a class="btn btn-outline-accent btn-sm" href="/league?id=${l.league_id}">View</a>
+                                ${joinButton(l)}
+                            </div>
+                        </td>
+                    </tr>`).join('');
+                renderPagination(data.page, data.total_pages);
+            } catch (err) {
+                showState('Error loading leagues.', true);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('filter-form').addEventListener('submit', e => {
+                e.preventDefault();
+                activeFilters = readFilters();
+                loadLeagues(1);
+            });
+            document.getElementById('pagination').addEventListener('click', e => {
+                const btn = e.target.closest('button[data-page]');
+                if (btn && !btn.disabled) loadLeagues(Number(btn.dataset.page));
+            });
+            document.getElementById('leagues-body').addEventListener('click', e => {
+                const btn = e.target.closest('button[data-action]');
+                if (btn && !btn.disabled) handleMembership(btn);
+            });
+            document.getElementById('join-form').addEventListener('submit', submitJoinPassword);
+            document.getElementById('join-modal').addEventListener('shown.bs.modal',
+                () => document.getElementById('join-password').focus());
+            loadLeagues(1);
+        });
+    </script>
+</body>
+</html>

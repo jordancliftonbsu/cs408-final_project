@@ -74,7 +74,7 @@ scp "${PROJECT_ROOT}/schema.sql" "$EC2_HOST":/home/ubuntu/fantasylol/
 scp "${PROJECT_ROOT}/seed.sql"   "$EC2_HOST":/home/ubuntu/fantasylol/
 
 # Optional helper/reference files (uploaded if present)
-for f in .env-example ingest.sh test.sh; do
+for f in .env-example ingest.sh test.sh seed-demo.sh seed_demo_leagues.sql; do
     if [ -f "${PROJECT_ROOT}/${f}" ]; then
         scp "${PROJECT_ROOT}/${f}" "$EC2_HOST":/home/ubuntu/fantasylol/
     fi

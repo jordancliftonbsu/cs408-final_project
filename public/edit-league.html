@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FantasyLoL - Create / Edit League</title>
+
+    <!-- Bootstrap 5 CSS CDN (base framework) -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Shared custom dark theme (must load after Bootstrap) -->
+    <link href="/css/styles.css" rel="stylesheet">
+
+    <!-- Shared header/footer loader -->
+    <script src="/js/layout.js" defer></script>
+</head>
+<body class="min-vh-100 d-flex flex-column">
+
+    <div data-include="header"></div>
+
+    <main class="container py-4">
+        <div class="form-card">
+            <h1 class="mb-3" id="page-title">Create League</h1>
+
+            <form id="league-form" class="card-dark form-dark p-4" novalidate>
+                <div class="mb-3">
+                    <label for="name" class="form-label">Name</label>
+                    <input type="text" class="form-control" id="name" maxlength="255" required>
+                </div>
+
+                <div class="mb-3">
+                    <label for="start-date" class="form-label">Start Date</label>
+                    <input type="date" class="form-control" id="start-date" required>
+                </div>
+
+                <div class="mb-3">
+                    <label for="end-date" class="form-label">End Date</label>
+                    <input type="date" class="form-control" id="end-date" required>
+                </div>
+
+                <div class="mb-3">
+                    <label for="password" class="form-label">Private</label>
+                    <input type="password" class="form-control" id="password" maxlength="72"
+                           autocomplete="new-password" aria-describedby="password-help">
+                    <div id="password-help" class="form-text text-muted">
+                        Enter a password to make the league private. Leave empty for a public league.
+                    </div>
+                </div>
+
+                <!-- Edit mode only, shown when the league is currently private -->
+                <div class="form-check mb-3 d-none" id="make-public-wrap">
+                    <input class="form-check-input" type="checkbox" id="make-public">
+                    <label class="form-check-label" for="make-public">Remove password (make public)</label>
+                </div>
+
+                <div class="mb-3">
+                    <label for="max-teams" class="form-label">Max Teams</label>
+                    <input type="number" class="form-control" id="max-teams" min="2" max="16" step="1" value="8" required>
+                </div>
+
+                <!-- Edit mode, shown once the league has started -->
+                <p class="text-muted d-none" id="started-note">
+                    This league has started. Start date, privacy and max teams can no longer be changed (the end date can still be adjusted).
+                </p>
+
+                <!-- Create mode only -->
+                <div class="form-check mb-3" id="add-me-wrap">
+                    <input class="form-check-input" type="checkbox" id="add-me">
+                    <label class="form-check-label" for="add-me">Add me to this league</label>
+                </div>
+
+                <div class="form-message mb-2" id="form-message" role="alert"></div>
+
+                <button type="submit" class="btn btn-accent" id="submit-btn">Create</button>
+            </form>
+
+            <!-- Edit mode only: member management + danger zone -->
+            <section class="card-dark p-4 mt-4 d-none" id="members-section" aria-labelledby="members-heading">
+                <h2 class="h5 section-heading" id="members-heading">Members</h2>
+                <div class="table-responsive">
+                    <table class="stats-table is-striped mt-0">
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>Team</th>
+                                <th><span class="visually-hidden">Actions</span></th>
+                            </tr>
+                        </thead>
+                        <tbody id="members-body"></tbody>
+                    </table>
+                </div>
+                <div class="form-message mt-2" id="members-message" role="alert"></div>
+
+                <hr class="border-secondary my-4">
+                <h2 class="h5 text-red">Delete league</h2>
+                <p class="text-muted">This permanently removes the league and all of its teams.</p>
+                <button type="button" class="btn btn-red" id="delete-btn">Delete League</button>
+            </section>
+        </div>
+    </main>
+
+    <div data-include="footer"></div>
+
+    <!-- Bootstrap 5 JS bundle (needed for collapsible navbar) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        // /edit-league creates a league; /edit-league/{id} edits league {id}.
+        const match = window.location.pathname.match(/^\/edit-league\/(\d+)\/?$/);
+        const leagueId = match ? match[1] : null;
+        const isEdit = leagueId !== null;
+
+        const form = document.getElementById('league-form');
+        const msg = document.getElementById('form-message');
+        const submitBtn = document.getElementById('submit-btn');
+
+        function setMessage(text, kind) {
+            msg.textContent = text;
+            msg.className = 'form-message mb-2' + (kind ? ' is-' + kind : '');
+        }
+
+        function disableForm(disabled) {
+            form.querySelectorAll('input, button').forEach(el => el.disabled = disabled);
+        }
+
+        async function init() {
+            const user = await FL.getCurrentUser();
+            if (!user) {
+                disableForm(true);
+                msg.className = 'form-message mb-2 is-error';
+                msg.innerHTML = 'You need to <a href="/login">log in</a> to ' + (isEdit ? 'edit' : 'create') + ' a league.';
+                return;
+            }
+            if (!isEdit) return;
+
+            document.getElementById('add-me-wrap').classList.add('d-none');
+            document.getElementById('page-title').textContent = 'Edit League';
+            submitBtn.textContent = 'Edit';
+            disableForm(true);
+            try {
+                const res = await fetch('/api/leagues/' + leagueId);
+                const data = await res.json();
+                if (!res.ok) { setMessage(data.error || 'Could not load league.', 'error'); return; }
+
+                document.getElementById('name').value = data.name;
+                document.getElementById('start-date').value = data.start_date;
+                document.getElementById('end-date').value = data.end_date;
+                document.getElementById('max-teams').value = data.max_teams;
+                document.getElementById('max-teams').min = Math.max(2, data.team_count);
+                if (data.private) {
+                    document.getElementById('make-public-wrap').classList.remove('d-none');
+                    document.getElementById('password-help').textContent =
+                        'This league is private. Enter a new password to change it, or leave empty to keep the current one.';
+                }
+                disableForm(false);
+                if (data.started) {
+                    // Server enforces this too; the UI just reflects it.
+                    ['start-date', 'password', 'make-public', 'max-teams'].forEach(
+                        id => document.getElementById(id).disabled = true);
+                    document.getElementById('started-note').classList.remove('d-none');
+                }
+                ownerId = data.owner_id;
+                renderMembers(data.members);
+                document.getElementById('members-section').classList.remove('d-none');
+            } catch (err) {
+                setMessage('Could not load league.', 'error');
+            }
+        }
+
+        // ---- Member management (edit mode) ----
+        let ownerId = null;
+        const membersMsg = document.getElementById('members-message');
+
+        function esc(str) {
+            return String(str).replace(/[&<>"']/g, c => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[c]));
+        }
+
+        function setMembersMessage(text, kind) {
+            membersMsg.textContent = text;
+            membersMsg.className = 'form-message mt-2' + (kind ? ' is-' + kind : '');
+        }
+
+        function renderMembers(members) {
+            const body = document.getElementById('members-body');
+            if (!members.length) {
+                body.innerHTML = '<tr><td colspan="3" class="state-cell">No members yet.</td></tr>';
+                return;
+            }
+            body.innerHTML = members.map(m => {
+                const isOwner = m.user_id === ownerId;
+                const actions = isOwner
+                    ? '<span class="badge badge-accent">Owner</span>'
+                    : `<div class="d-flex gap-2 justify-content-end">
+                           <button type="button" class="btn btn-outline-accent btn-sm" data-action="transfer"
+                                   data-user="${m.user_id}" data-name="${esc(m.username)}">Make owner</button>
+                           <button type="button" class="btn btn-red btn-sm" data-action="kick"
+                                   data-user="${m.user_id}" data-name="${esc(m.username)}">Kick</button>
+                       </div>`;
+                return `<tr><td><strong>${esc(m.username)}</strong></td><td>${esc(m.team_name)}</td><td class="text-end">${actions}</td></tr>`;
+            }).join('');
+        }
+
+        async function reloadMembers() {
+            const res = await fetch('/api/leagues/' + leagueId);
+            const data = await res.json();
+            if (res.ok) { ownerId = data.owner_id; renderMembers(data.members); }
+        }
+
+        async function api(url, method, body) {
+            const res = await fetch(url, {
+                method,
+                headers: body ? { 'Content-Type': 'application/json' } : {},
+                body: body ? JSON.stringify(body) : undefined,
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || 'Something went wrong.');
+            return data;
+        }
+
+        document.getElementById('members-body').addEventListener('click', async e => {
+            const btn = e.target.closest('button[data-action]');
+            if (!btn) return;
+            const uid = Number(btn.dataset.user);
+            const name = btn.dataset.name;
+            setMembersMessage('', '');
+            try {
+                if (btn.dataset.action === 'kick') {
+                    if (!confirm(`Kick ${name} from this league? Their team and roster will be deleted.`)) return;
+                    await api(`/api/leagues/${leagueId}/members/${uid}`, 'DELETE');
+                    await reloadMembers();
+                    setMembersMessage(`${name} was removed.`, 'success');
+                } else {
+                    if (!confirm(`Transfer ownership to ${name}? You will no longer be able to edit this league.`)) return;
+                    await api(`/api/leagues/${leagueId}/transfer`, 'POST', { user_id: uid });
+                    window.location.href = '/league?id=' + leagueId;
+                }
+            } catch (err) {
+                setMembersMessage(err.message, 'error');
+            }
+        });
+
+        document.getElementById('delete-btn').addEventListener('click', async () => {
+            if (!confirm('Permanently delete this league? This cannot be undone.')) return;
+            setMembersMessage('', '');
+            try {
+                await api('/api/leagues/' + leagueId, 'DELETE');
+                window.location.href = '/leagues-search';
+            } catch (err) {
+                setMembersMessage(err.message, 'error');
+            }
+        });
+
+        form.addEventListener('submit', async e => {
+            e.preventDefault();
+            setMessage('', '');
+
+            const maxTeams = parseInt(document.getElementById('max-teams').value, 10);
+            const name = document.getElementById('name').value.trim();
+            const startDate = document.getElementById('start-date').value;
+            const endDate = document.getElementById('end-date').value;
+            if (!name) { setMessage('Name is required.', 'error'); return; }
+            if (!startDate) { setMessage('Please choose a start date.', 'error'); return; }
+            if (!endDate) { setMessage('Please choose an end date.', 'error'); return; }
+            if (endDate < startDate) { setMessage("End date can't be before the start date.", 'error'); return; }
+            if (!(maxTeams >= 2 && maxTeams <= 16)) { setMessage('Max teams must be between 2 and 16.', 'error'); return; }
+
+            const body = {
+                name,
+                start_date: startDate,
+                end_date: endDate,
+                password: document.getElementById('password').value,
+                make_public: document.getElementById('make-public').checked,
+                max_teams: maxTeams,
+                add_me: document.getElementById('add-me').checked,
+            };
+
+            submitBtn.disabled = true;
+            try {
+                const res = await fetch(isEdit ? '/api/leagues/' + leagueId : '/api/leagues', {
+                    method: isEdit ? 'PUT' : 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                const data = await res.json();
+                if (!res.ok) { setMessage(data.error || 'Something went wrong.', 'error'); return; }
+                setMessage(isEdit ? 'League updated.' : 'League created.', 'success');
+                window.location.href = '/league?id=' + data.league_id;
+            } catch (err) {
+                setMessage('Network error. Please try again.', 'error');
+            } finally {
+                submitBtn.disabled = false;
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>

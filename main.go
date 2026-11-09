@@ -46,6 +46,12 @@ func InitDB() (*sql.DB, error) {
 		return nil, fmt.Errorf("failed to execute schema.sql: %w", err)
 	}
 
+	// Migrate databases created before leagues.password_hash / end_date existed
+	// (CREATE TABLE IF NOT EXISTS does not add columns to existing tables).
+	if err := ensureLeagueColumns(db); err != nil {
+		return nil, fmt.Errorf("failed to migrate leagues table: %w", err)
+	}
+
 	// Seed demo data (INSERT OR IGNORE — safe to re-run, never overwrites)
 	SeedData(db)
 
@@ -92,6 +98,8 @@ func setupRoutes(db *sql.DB) *http.ServeMux {
 	// League Endpoints
 	leaguesHandler := &LeaguesHandler{DB: db, Auth: authHandler}
 	mux.HandleFunc("/api/leagues/mine", leaguesHandler.MyLeaguesHandler)
+	mux.HandleFunc("/api/leagues", leaguesHandler.LeaguesCollectionHandler) // GET search, POST create
+	mux.HandleFunc("/api/leagues/", leaguesHandler.LeagueItemHandler)       // GET/PUT /api/leagues/{id}
 
 	// Health & Utility Endpoints
 	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
@@ -120,9 +128,19 @@ func setupRoutes(db *sql.DB) *http.ServeMux {
 		http.ServeFile(w, r, "./public/login.html")
 	})
 
-	mux.HandleFunc("/leagues-search", comingSoonHandler("Search Leagues"))
+	mux.HandleFunc("/leagues-search", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "./public/leagues.html")
+	})
 	mux.HandleFunc("/league", comingSoonHandler("League"))
-	mux.HandleFunc("/create-league", comingSoonHandler("Create / Edit League"))
+	// Create (/edit-league) and edit (/edit-league/{id}) share one page.
+	serveEditLeague := func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "./public/edit-league.html")
+	}
+	mux.HandleFunc("/edit-league", serveEditLeague)
+	mux.HandleFunc("/edit-league/", serveEditLeague)
+	mux.HandleFunc("/create-league", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/edit-league", http.StatusMovedPermanently)
+	})
 	mux.HandleFunc("/edit-team", comingSoonHandler("Edit Team"))
 	mux.HandleFunc("/pro-player-search", comingSoonHandler("Pro Player Search"))
 	mux.HandleFunc("/my-leagues", comingSoonHandler("My Leagues"))

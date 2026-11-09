@@ -101,6 +101,24 @@ h1, h2, h3, h4, h5, h6 {
     color: var(--accent-primary) !important;
 }
 
+/* Hamburger toggler: Bootstrap's default icon is dark gray, which disappears
+   on the dark navbar. Use a light icon plus a visible accent border. */
+.navbar-custom .navbar-toggler {
+    --bs-navbar-toggler-border-color: var(--accent-link);
+    --bs-navbar-toggler-icon-bg: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='%23ffffff' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2.5' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
+    --bs-navbar-toggler-focus-width: 0.2rem;
+    border-width: 2px;
+    padding: 0.4rem 0.65rem;
+}
+
+.navbar-custom .navbar-toggler:hover {
+    background-color: var(--bg-elevated);
+}
+
+.navbar-custom .navbar-toggler:focus {
+    box-shadow: 0 0 0 0.2rem var(--accent-glow);
+}
+
 .brand-accent {
     color: var(--accent-primary) !important;
     font-weight: 700;
@@ -462,4 +480,137 @@ footer a:hover {
 
 .dropdown-dark .dropdown-divider {
     border-top-color: var(--border-color);
+}
+
+/* -------------------------------------------------------------------------
+   Striped rows (slightly alternating gray backgrounds) for stats-table
+   ------------------------------------------------------------------------- */
+.stats-table.is-striped tbody tr:nth-child(even) {
+    background-color: var(--bg-surface);
+}
+
+.stats-table.is-striped tbody tr:nth-child(odd) {
+    background-color: var(--bg-card);
+}
+
+.stats-table.is-striped tbody tr:hover {
+    background-color: var(--bg-elevated);
+}
+
+/* -------------------------------------------------------------------------
+   Dark form controls (filter panel, league form)
+   ------------------------------------------------------------------------- */
+.form-dark .form-label,
+.form-dark .form-check-label {
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.form-dark .form-control,
+.form-dark .form-select {
+    background-color: var(--bg-canvas);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    color-scheme: dark; /* dark native date picker */
+}
+
+.form-dark .form-control::placeholder {
+    color: var(--text-faint);
+}
+
+.form-dark .form-control:focus,
+.form-dark .form-select:focus {
+    background-color: var(--bg-canvas);
+    color: var(--text-primary);
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 0.2rem var(--accent-glow);
+}
+
+.form-dark .form-control:disabled,
+.form-dark .form-check-input:disabled {
+    opacity: 0.5;
+}
+
+.form-dark .form-check-input {
+    background-color: var(--bg-canvas);
+    border-color: var(--border-color);
+}
+
+.form-dark .form-check-input:checked {
+    background-color: var(--accent-primary);
+    border-color: var(--accent-primary);
+}
+
+/* Inline feedback for forms (generic version of .auth-message) */
+.form-message {
+    min-height: 1.25rem;
+    font-size: 0.9rem;
+}
+
+.form-message.is-error {
+    color: var(--red-accent);
+}
+
+.form-message.is-success {
+    color: var(--green-accent);
+}
+
+/* Narrow centered card for the create/edit league form */
+.form-card {
+    width: 100%;
+    max-width: 560px;
+    margin-inline: auto;
+}
+
+/* Pagination themed for the dark canvas */
+.pagination-dark .page-link {
+    background-color: var(--bg-card);
+    border-color: var(--border-color);
+    color: var(--accent-link);
+}
+
+.pagination-dark .page-item.active .page-link {
+    background-color: var(--accent-primary);
+    border-color: var(--accent-primary);
+    color: var(--on-accent);
+}
+
+.pagination-dark .page-item.disabled .page-link {
+    background-color: var(--bg-surface);
+    color: var(--text-faint);
+}
+
+/* Collapsible section toggle styled as a prominent heading */
+.filter-toggle {
+    display: inline-block;
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--accent-link);
+}
+
+.filter-toggle:hover,
+.filter-toggle:focus {
+    color: var(--accent-hover);
+}
+
+.filter-toggle-icon {
+    display: inline-block;
+    transition: transform 0.15s ease-in-out;
+}
+
+/* Rotate the arrow when the panel is open */
+.filter-toggle[aria-expanded="true"] .filter-toggle-icon {
+    transform: rotate(90deg);
+}
+
+/* Dark Bootstrap modal */
+.modal-dark .modal-content {
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+}
+
+.modal-dark .modal-header,
+.modal-dark .modal-footer {
+    border-color: var(--border-color);
 }

@@ -19,6 +19,8 @@ CREATE TABLE IF NOT EXISTS leagues (
     max_teams INTEGER DEFAULT 8,
     start_date DATE,
     privacy VARCHAR(50) DEFAULT 'Public',
+    password_hash VARCHAR(255),            -- bcrypt hash; NULL/empty = public league
+    end_date DATE,                         -- last day of the league; NULL = no end date
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (commissioner_id) REFERENCES users(user_id)
 );
